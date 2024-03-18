@@ -106,13 +106,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\DAEGit\GameGraph2\VulkanTutorial\VulkanSDK\1.3.261.1\Include;C:\DAEGit\GameGraph2\VulkanTutorial\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;C:\DAEGit\GameGraph2\VulkanTutorial\glm-1.0.0\glm-1.0.0\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\VulkanTutorial\glm-1.0.0\glm-1.0.0\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\DAEGit\GameGraph2\VulkanTutorial\VulkanSDK\1.3.261.1\Lib;C:\DAEGit\GameGraph2\VulkanTutorial\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Lib;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -124,7 +124,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>C:\DAEGit\GameGraph2\VulkanTutorial\VulkanSDK\1.3.261.1\Include;C:\DAEGit\GameGraph2\VulkanTutorial\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;C:\DAEGit\GameGraph2\VulkanTutorial\glm-1.0.0\glm-1.0.0\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\VulkanTutorial\glm-1.0.0\glm-1.0.0\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -132,7 +132,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalLibraryDirectories>C:\DAEGit\GameGraph2\VulkanTutorial\VulkanSDK\1.3.261.1\Lib;C:\DAEGit\GameGraph2\VulkanTutorial\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Lib;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\lib-vc2022;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
