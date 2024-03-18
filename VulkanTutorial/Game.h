@@ -69,6 +69,7 @@ private:
     std::vector<VkImageView> m_vSwapChainImageViews;
     VkRenderPass m_RenderPass;
     VkPipelineLayout m_PipelineLayout;
+    VkPipeline m_GraphicsPipeline;
 
 
     //Main functions

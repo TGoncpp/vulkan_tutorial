@@ -49,6 +49,7 @@ void Game::mainLoop()
 
 void Game::cleanup()
 {
+    vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
     vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
     for (auto imageView : m_vSwapChainImageViews) {
@@ -539,6 +540,13 @@ void Game::createGraphicsPipeline()
     //array of shaderStagesInfo
     VkPipelineShaderStageCreateInfo vShaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
+    //Dynamic state
+    std::vector<VkDynamicState> vDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo dynamicInfo{};
+    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicInfo.dynamicStateCount = static_cast<uint32_t>(vDynamicStates.size());
+    dynamicInfo.pDynamicStates = vDynamicStates.data();
+
     //vertex format info 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -567,7 +575,7 @@ void Game::createGraphicsPipeline()
     scissor.offset = { 0, 0 };
     scissor.extent = m_SwapChainExtent;
 
-    //setting a nonDynamic viewportState ->look at tutori  al for dynamic seeting
+    //setting a nonDynamic viewportState ->look at tutorial for dynamic setting
     VkPipelineViewportStateCreateInfo viewportState{};
     viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
     viewportState.viewportCount = 1;
@@ -598,7 +606,7 @@ void Game::createGraphicsPipeline()
     multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
     multisampling.alphaToOneEnable      = VK_FALSE; // Optional
 
-    //Color blending
+    //Configuration off attachted framebuffer
     VkPipelineColorBlendAttachmentState colorBlendAttachment{};
     colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     colorBlendAttachment.blendEnable         = VK_FALSE;
@@ -608,6 +616,18 @@ void Game::createGraphicsPipeline()
     colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
     colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
     colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;      // Optional
+
+    //Color blending
+    VkPipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable = VK_FALSE;
+    colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments = &colorBlendAttachment;
+    colorBlending.blendConstants[0] = 0.0f; // Optional
+    colorBlending.blendConstants[1] = 0.0f; // Optional
+    colorBlending.blendConstants[2] = 0.0f; // Optional
+    colorBlending.blendConstants[3] = 0.0f; // Optional
 
     //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
     VkPipelineLayoutCreateInfo pipelineLayout{};
@@ -622,6 +642,33 @@ void Game::createGraphicsPipeline()
         throw std::runtime_error("failed to create pipeline layout");
     }
 
+    VkGraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+    //Shader stages
+    pipelineInfo.stageCount            = 2;
+    pipelineInfo.pStages               = vShaderStages;
+    //Fixed Function stage
+    pipelineInfo.pVertexInputState     = &vertexInputInfo;
+    pipelineInfo.pInputAssemblyState   = &inputAssemblyInfo;
+    pipelineInfo.pViewportState        = &viewportState;
+    pipelineInfo.pRasterizationState   = &rasterizer;
+    pipelineInfo.pMultisampleState     = &multisampling;
+    pipelineInfo.pDepthStencilState    = nullptr; //optional
+    pipelineInfo.pColorBlendState      = &colorBlending;
+    pipelineInfo.pDynamicState         = &dynamicInfo;
+    //layout
+    pipelineInfo.layout = m_PipelineLayout;
+    //Render pass
+    pipelineInfo.renderPass = m_RenderPass;
+    pipelineInfo.subpass = 0; //index
+    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; //optional
+    pipelineInfo.basePipelineIndex = -1; //optional
+
+    if (vkCreateGraphicsPipelines(m_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
+    {
+        throw std::runtime_error("creation off grapics pipeline failed");
+    }
 
     //destroying of shader after creation off pipline
     vkDestroyShaderModule(m_LogicalDevice, fragShaderModule, nullptr);
