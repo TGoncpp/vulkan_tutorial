@@ -67,6 +67,7 @@ private:
     VkFormat m_SwapChainImageFormat;
     VkExtent2D m_SwapChainExtent;
     std::vector<VkImageView> m_vSwapChainImageViews;
+    VkRenderPass m_RenderPass;
     VkPipelineLayout m_PipelineLayout;
 
 
@@ -134,6 +135,10 @@ private:
     static std::vector<char> readFile(const std::string& filename);
     //helperModule to pass the filecode to pipeline
     VkShaderModule  createShaderModule(const std::vector<char>& code);
+
+    //RENDER PASS
+    //--------------------------------
+    void createRenderPass();
 
 
 };

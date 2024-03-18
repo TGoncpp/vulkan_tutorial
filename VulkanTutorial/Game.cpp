@@ -35,6 +35,7 @@ void Game::initVulkan()
     createLogicalDevice();
     createSwapChain();
     createImageView();
+    createRenderPass();
     createGraphicsPipeline();
 }
 
@@ -49,6 +50,7 @@ void Game::mainLoop()
 void Game::cleanup()
 {
     vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
+    vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
     for (auto imageView : m_vSwapChainImageViews) {
         vkDestroyImageView(m_LogicalDevice, imageView, nullptr);
     }
@@ -657,4 +659,47 @@ VkShaderModule  Game::createShaderModule(const std::vector<char>& code)
 
     //stored localy because after the creation off the pipeline we dont need this value anymore
     return shaderModule;
+}
+
+void Game::createRenderPass()
+{
+    VkAttachmentDescription collorAttachment{};
+    collorAttachment.format = m_SwapChainImageFormat;
+    collorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    //color and depth
+    collorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //start with black background
+    collorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    //stencil data
+    collorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    collorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+    collorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;    //layout at start off creting pass
+    collorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//How th renderpass should look like at the end
+
+
+    VkAttachmentReference colorAttachmentRef{};
+    colorAttachmentRef.attachment = 0;
+    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+
+    VkSubpassDescription subPass{};
+    subPass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subPass.colorAttachmentCount = 1;
+    subPass.pColorAttachments = &colorAttachmentRef;
+
+
+    //Creating the RENDERPASS
+    VkRenderPassCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    createInfo.attachmentCount = 1;
+    createInfo.pAttachments = &collorAttachment;
+    createInfo.subpassCount = 1;
+    createInfo.pSubpasses = &subPass;
+
+    if (vkCreateRenderPass(m_LogicalDevice, &createInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
+    {
+        throw std::runtime_error("Creating renderPass failed");
+    }
+
+
 }
