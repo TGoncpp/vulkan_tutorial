@@ -40,6 +40,7 @@ void Game::initVulkan()
     createFramebuffer();
     createCommandPool();
     createCommandBuffer();
+    createSyncObjects();
 }
 
 void Game::mainLoop()
@@ -47,11 +48,16 @@ void Game::mainLoop()
     while (!glfwWindowShouldClose(m_Window))
     {
         glfwPollEvents();
+        drawFrame();
     }
+    vkDeviceWaitIdle(m_LogicalDevice);
 }
 
 void Game::cleanup()
 {
+    vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphore, nullptr);
+    vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedAvailableSemaphore, nullptr);
+    vkDestroyFence(m_LogicalDevice, m_InFlightFence, nullptr);
     vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
     for (auto& buffer : m_vSwapchainFramebuffers)
     {
@@ -752,12 +758,24 @@ void Game::createRenderPass()
     createInfo.subpassCount = 1;
     createInfo.pSubpasses = &subPass;
 
+    //added for improving synchronic behaviour
+    VkSubpassDependency dependency{};
+    dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    dependency.dstSubpass = 0;
+    //assign the stage where we have to wait for
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.srcAccessMask = 0;
+    //the opperation that has to wait
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+    createInfo.dependencyCount = 1;
+    createInfo.pDependencies = &dependency;
+
     if (vkCreateRenderPass(m_LogicalDevice, &createInfo, nullptr, &m_RenderPass) != VK_SUCCESS)
     {
         throw std::runtime_error("Creating renderPass failed");
     }
-
-
 }
 
 void Game::createFramebuffer()
@@ -865,4 +883,75 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     {
         throw std::runtime_error("failed to record command buffer");
     }
+}
+
+void Game::drawFrame()
+{
+    //1. wait for previous frame
+    vkWaitForFences(m_LogicalDevice, 1, &m_InFlightFence, VK_TRUE, UINT32_MAX);
+    vkResetFences(m_LogicalDevice, 1, &m_InFlightFence);
+
+    //2.Aquire an image from the swap chain
+    uint32_t imageIndex;
+    vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+    //3.Recording the command buffer
+    vkResetCommandBuffer(m_CommandBuffer, 0);
+    recordCommandBuffer(m_CommandBuffer, imageIndex);
+
+    //4. Submitting the command buffer
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    VkSemaphore waitSemaphores[] = { m_ImageAvailableSemaphore };
+    VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    submitInfo.waitSemaphoreCount = 1;
+    submitInfo.pWaitSemaphores = waitSemaphores;
+    submitInfo.pWaitDstStageMask = waitstages;
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &m_CommandBuffer;
+
+    VkSemaphore signalSemaphore[] = { m_RenderFinishedAvailableSemaphore };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphore;
+
+    if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFence) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to submit the command buffer");
+    }
+
+    //5.Present
+    VkPresentInfoKHR presentInfo{};
+    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    presentInfo.waitSemaphoreCount = 1;
+    presentInfo.pWaitSemaphores = signalSemaphore;
+
+    VkSwapchainKHR swapChains[] = { m_SwapChain };
+    presentInfo.swapchainCount = 1;
+    presentInfo.pSwapchains = swapChains;
+    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pResults = nullptr; //optional
+
+    vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+
+
+}
+
+void Game::createSyncObjects()
+{
+    VkSemaphoreCreateInfo semaphore{};
+    semaphore.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+    VkFenceCreateInfo fence{};
+    fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fence.flags = VK_FENCE_CREATE_SIGNALED_BIT; //this puts the value to true at the start, if we dont do this. the draw function will indefinitly wait for its signal
+
+    if (vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_ImageAvailableSemaphore) != VK_SUCCESS
+    || vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_RenderFinishedAvailableSemaphore) != VK_SUCCESS
+    || vkCreateFence(m_LogicalDevice, &fence, nullptr, &m_InFlightFence) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to create synchronological helpers");
+    }
+
 }

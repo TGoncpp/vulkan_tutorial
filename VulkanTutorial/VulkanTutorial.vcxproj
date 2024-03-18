@@ -142,6 +142,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Semaphore.h" />
     <ClInclude Include="Structs.h" />
   </ItemGroup>
   <ItemGroup>
