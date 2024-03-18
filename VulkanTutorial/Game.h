@@ -70,6 +70,7 @@ private:
     VkRenderPass m_RenderPass;
     VkPipelineLayout m_PipelineLayout;
     VkPipeline m_GraphicsPipeline;
+    std::vector<VkFramebuffer> m_vSwapchainFramebuffers;
 
 
     //Main functions
@@ -136,10 +137,13 @@ private:
     static std::vector<char> readFile(const std::string& filename);
     //helperModule to pass the filecode to pipeline
     VkShaderModule  createShaderModule(const std::vector<char>& code);
-
     //RENDER PASS
-    //--------------------------------
     void createRenderPass();
+
+    //FRAMEBUFFER
+    //----------------------------------
+    void createFramebuffer();
+
 
 
 };

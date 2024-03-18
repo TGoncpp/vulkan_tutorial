@@ -37,6 +37,7 @@ void Game::initVulkan()
     createImageView();
     createRenderPass();
     createGraphicsPipeline();
+    createFramebuffer();
 }
 
 void Game::mainLoop()
@@ -49,6 +50,11 @@ void Game::mainLoop()
 
 void Game::cleanup()
 {
+    for (auto& buffer : m_vSwapchainFramebuffers)
+    {
+        vkDestroyFramebuffer(m_LogicalDevice, buffer, nullptr);
+        m_vSwapchainFramebuffers.clear();
+    }
     vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
     vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
@@ -749,4 +755,28 @@ void Game::createRenderPass()
     }
 
 
+}
+
+void Game::createFramebuffer()
+{
+    m_vSwapchainFramebuffers.resize(m_vSwapChainImageViews.size());
+    for (size_t i{0}; i <  m_vSwapchainFramebuffers.size(); ++i)
+    {
+        VkImageView arrAttachments[] = { m_vSwapChainImageViews[i] };
+
+        VkFramebufferCreateInfo framebufferInfo{};
+        framebufferInfo.sType            = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferInfo.renderPass       = m_RenderPass;
+        framebufferInfo.attachmentCount  = 1;
+        framebufferInfo.pAttachments     = arrAttachments;
+        framebufferInfo.width            = m_SwapChainExtent.width;
+        framebufferInfo.height           = m_SwapChainExtent.height;
+        framebufferInfo.layers           = 1;
+
+        if (vkCreateFramebuffer(m_LogicalDevice, &framebufferInfo, nullptr, &m_vSwapchainFramebuffers[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("creation off framebuffer %i failed"), i;
+        }
+
+    }
 }
