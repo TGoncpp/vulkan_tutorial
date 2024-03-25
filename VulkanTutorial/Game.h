@@ -80,11 +80,18 @@ private:
     std::vector < VkSemaphore> m_vRenderFinishedAvailableSemaphores;
     std::vector < VkFence> m_vInFlightFences;
 
-
+    const std::vector<Vertex> m_vVertices = {
+           {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+           {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+           {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+           };
+    VkBuffer m_VertexBuffer;
+    VkDeviceMemory m_VertexBufferMemory;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
     uint32_t m_CurrentFrame        = 0;
+
 
 
     //-----------------------------------------------------------
@@ -169,5 +176,9 @@ private:
 
     //SEMAPHORE AND FENCE
     void createSyncObjects();
+
+    //VERTEX BUFFER
+    void createVertexBuffer();
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
 };

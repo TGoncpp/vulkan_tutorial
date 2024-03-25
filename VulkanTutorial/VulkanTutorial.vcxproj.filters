@@ -46,5 +46,11 @@
     <None Include="compile.bat">
       <Filter>shader</Filter>
     </None>
+    <None Include="shader2.vert">
+      <Filter>shader</Filter>
+    </None>
+    <None Include="shader2.frag">
+      <Filter>shader</Filter>
+    </None>
   </ItemGroup>
 </Project>

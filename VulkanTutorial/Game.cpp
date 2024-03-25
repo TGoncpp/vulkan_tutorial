@@ -50,6 +50,7 @@ void Game::initVulkan()
     createGraphicsPipeline();
     createFramebuffer();
     createCommandPool();
+    createVertexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -68,6 +69,8 @@ void Game::cleanup()
 {
     cleanupSwapchain();
 
+    vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
+    vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
     vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
     vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
@@ -506,6 +509,16 @@ void Game::createSwapChain()
 
 void Game::recreateSwapchain()
 {
+    //For minimizing-> wait for as long as window is minimized 
+    int width{}, height{};
+    glfwGetFramebufferSize(m_Window, &width, &height);
+    while (width == 0 || height == 0)
+    {
+        glfwGetFramebufferSize(m_Window, &width, &height);
+        glfwWaitEvents();
+    }
+
+    //for resizing
     //first wait for resources to be available
     vkDeviceWaitIdle(m_LogicalDevice);
 
@@ -597,12 +610,15 @@ void Game::createGraphicsPipeline()
     dynamicInfo.pDynamicStates = vDynamicStates.data();
 
     //vertex format info 
+    auto bindingDescription = Vertex::getBindDescription();
+    auto attributeDescription = Vertex::getAttributeDescriptions();
+
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount   = 0;
-    vertexInputInfo.pVertexBindingDescriptions      = nullptr; // Optional
-    vertexInputInfo.vertexAttributeDescriptionCount = 0;
-    vertexInputInfo.pVertexAttributeDescriptions    = nullptr; // Optional
+    vertexInputInfo.vertexBindingDescriptionCount   = 1;
+    vertexInputInfo.pVertexBindingDescriptions      = &bindingDescription;
+    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescription.size());
+    vertexInputInfo.pVertexAttributeDescriptions    = attributeDescription.data();
 
     //Input Assembly
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
@@ -910,8 +926,17 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     scissor.offset = { 0,0 };
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    //DRAW some STUFFFF......
-    vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    ////DRAW some STUFFFF......
+    //vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    
+    //Binding off vertexbuffer
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+
+    VkBuffer vertexBuffers[] = { m_VertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+
+    vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -919,6 +944,8 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     {
         throw std::runtime_error("failed to record command buffer");
     }
+
+
 }
 
 void Game::drawFrame()
@@ -930,7 +957,8 @@ void Game::drawFrame()
     //2.Aquire an image from the swap chain
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_vImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) 
+    {
         recreateSwapchain();
         return;
     }
@@ -1012,4 +1040,55 @@ void Game::createSyncObjects()
             throw std::runtime_error("failed to create synchronological helpers");
         }
     }
+}
+
+void Game::createVertexBuffer()
+{
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = sizeof(m_vVertices[0]) * m_vVertices.size();
+    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; //only used by graphicsqueue so exlusive is enough
+
+    if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
+        throw std::runtime_error("creation off vertex buffer failed");
+
+    VkMemoryRequirements memRequirements{};
+    vkGetBufferMemoryRequirements(m_LogicalDevice, m_VertexBuffer, &memRequirements);
+
+    //Memory allocation
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memRequirements.size;
+    allocateInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    if (vkAllocateMemory(m_LogicalDevice, &allocateInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
+        throw std::runtime_error("failed to allocate memory for vertex buffer");
+
+    //Filling the Vertex buffer
+    vkBindBufferMemory(m_LogicalDevice, m_VertexBuffer, m_VertexBufferMemory, 0);
+    void* data;
+    vkMapMemory(m_LogicalDevice, m_VertexBufferMemory, 0, bufferInfo.size, 0, &data);
+    memcpy(data, m_vVertices.data(), static_cast<size_t>(bufferInfo.size));
+    vkUnmapMemory(m_LogicalDevice, m_VertexBufferMemory);
+
+    //Binding the vertex buffer will happen in the recordCommandBuffer()
+
+
+}
+
+uint32_t Game::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
+{
+    VkPhysicalDeviceMemoryProperties memProps{};
+    vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProps);
+
+    for (uint32_t i{}; i < memProps.memoryTypeCount; ++i)
+    {
+        if (typeFilter & (1 << i) && (memProps.memoryTypes[i].propertyFlags & properties) == properties)
+        {
+            return i;
+        }
+    }
+
+    throw std::runtime_error("failed to find suitable memory type");
 }
