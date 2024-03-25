@@ -183,8 +183,10 @@ private:
 
     //Abstraction
     void createBuffer(VkDeviceSize bufferSize, 
-        VkBufferUsageFlagBits flags, 
+        VkBufferUsageFlags flags,
         VkMemoryPropertyFlags memryProps, 
         VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory);
+    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+
 
 };
