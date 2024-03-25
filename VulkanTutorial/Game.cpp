@@ -1044,32 +1044,15 @@ void Game::createSyncObjects()
 
 void Game::createVertexBuffer()
 {
-    VkBufferCreateInfo bufferInfo{};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = sizeof(m_vVertices[0]) * m_vVertices.size();
-    bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; //only used by graphicsqueue so exlusive is enough
+    VkDeviceSize bufferSize = sizeof(m_vVertices[0]) * m_vVertices.size();
+    createBuffer(bufferSize, 
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, 
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        m_VertexBuffer, m_VertexBufferMemory);
 
-    if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &m_VertexBuffer) != VK_SUCCESS)
-        throw std::runtime_error("creation off vertex buffer failed");
-
-    VkMemoryRequirements memRequirements{};
-    vkGetBufferMemoryRequirements(m_LogicalDevice, m_VertexBuffer, &memRequirements);
-
-    //Memory allocation
-    VkMemoryAllocateInfo allocateInfo{};
-    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocateInfo.allocationSize = memRequirements.size;
-    allocateInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-    if (vkAllocateMemory(m_LogicalDevice, &allocateInfo, nullptr, &m_VertexBufferMemory) != VK_SUCCESS)
-        throw std::runtime_error("failed to allocate memory for vertex buffer");
-
-    //Filling the Vertex buffer
-    vkBindBufferMemory(m_LogicalDevice, m_VertexBuffer, m_VertexBufferMemory, 0);
     void* data;
-    vkMapMemory(m_LogicalDevice, m_VertexBufferMemory, 0, bufferInfo.size, 0, &data);
-    memcpy(data, m_vVertices.data(), static_cast<size_t>(bufferInfo.size));
+    vkMapMemory(m_LogicalDevice, m_VertexBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, m_vVertices.data(), static_cast<size_t>(bufferSize));
     vkUnmapMemory(m_LogicalDevice, m_VertexBufferMemory);
 
     //Binding the vertex buffer will happen in the recordCommandBuffer()
@@ -1091,4 +1074,34 @@ uint32_t Game::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags propert
     }
 
     throw std::runtime_error("failed to find suitable memory type");
+}
+
+void Game::createBuffer(VkDeviceSize bufferSize, 
+                    VkBufferUsageFlagBits flags, 
+                    VkMemoryPropertyFlags memryProps, 
+                    VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory)
+{
+    VkBufferCreateInfo bufferInfo{};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = bufferSize;
+    bufferInfo.usage = flags;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE; //only used by graphicsqueue so exlusive is enough
+
+    if (vkCreateBuffer(m_LogicalDevice, &bufferInfo, nullptr, &vertexBuffer) != VK_SUCCESS)
+        throw std::runtime_error("creation off vertex buffer failed");
+
+    VkMemoryRequirements memRequirements{};
+    vkGetBufferMemoryRequirements(m_LogicalDevice, vertexBuffer, &memRequirements);
+
+    //Memory allocation
+    VkMemoryAllocateInfo allocateInfo{};
+    allocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocateInfo.allocationSize = memRequirements.size;
+    allocateInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, memryProps);
+
+    if (vkAllocateMemory(m_LogicalDevice, &allocateInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS)
+        throw std::runtime_error("failed to allocate memory for vertex buffer");
+
+    //Filling the Vertex buffer
+    vkBindBufferMemory(m_LogicalDevice, vertexBuffer, vertexBufferMemory, 0);
 }

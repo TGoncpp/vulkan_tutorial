@@ -81,7 +81,7 @@ private:
     std::vector < VkFence> m_vInFlightFences;
 
     const std::vector<Vertex> m_vVertices = {
-           {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+           {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
            {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
            {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
            };
@@ -180,5 +180,11 @@ private:
     //VERTEX BUFFER
     void createVertexBuffer();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+    //Abstraction
+    void createBuffer(VkDeviceSize bufferSize, 
+        VkBufferUsageFlagBits flags, 
+        VkMemoryPropertyFlags memryProps, 
+        VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory);
 
 };
