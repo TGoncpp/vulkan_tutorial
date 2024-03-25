@@ -22,8 +22,19 @@ void Game::initWindow()
 {
     glfwInit();
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API); //Tell GLFW not to create a openGl context
-    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);   // Tell GLFW not to bother with resizing the window
+    //glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);   // Tell GLFW not to bother with resizing the window
     m_Window = glfwCreateWindow(m_WindowWidth, m_WindowHeight, m_WindowTitle.c_str(), nullptr, nullptr);
+
+    //set user pointer off aplication in window
+    glfwSetWindowUserPointer(m_Window, this);
+    glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallBack);
+}
+
+void Game::framebufferResizeCallBack(GLFWwindow* window, int width, int height)
+{
+    auto app = reinterpret_cast<Game*>(glfwGetWindowUserPointer(window));
+
+    app->m_FramebufferResiezed = true;
 }
 
 void Game::initVulkan()
@@ -39,7 +50,7 @@ void Game::initVulkan()
     createGraphicsPipeline();
     createFramebuffer();
     createCommandPool();
-    createCommandBuffer();
+    createCommandBuffers();
     createSyncObjects();
 }
 
@@ -55,22 +66,19 @@ void Game::mainLoop()
 
 void Game::cleanup()
 {
-    vkDestroySemaphore(m_LogicalDevice, m_ImageAvailableSemaphore, nullptr);
-    vkDestroySemaphore(m_LogicalDevice, m_RenderFinishedAvailableSemaphore, nullptr);
-    vkDestroyFence(m_LogicalDevice, m_InFlightFence, nullptr);
-    vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
-    for (auto& buffer : m_vSwapchainFramebuffers)
-    {
-        vkDestroyFramebuffer(m_LogicalDevice, buffer, nullptr);
-        m_vSwapchainFramebuffers.clear();
-    }
+    cleanupSwapchain();
+
     vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
     vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
     vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
-    for (auto imageView : m_vSwapChainImageViews) {
-        vkDestroyImageView(m_LogicalDevice, imageView, nullptr);
+    for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        vkDestroySemaphore(m_LogicalDevice, m_vImageAvailableSemaphores[i], nullptr);
+        vkDestroySemaphore(m_LogicalDevice, m_vRenderFinishedAvailableSemaphores[i], nullptr);
+        vkDestroyFence(m_LogicalDevice, m_vInFlightFences[i], nullptr);
     }
-    vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
+
+    vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
     vkDestroyDevice(m_LogicalDevice, nullptr);
     if (enableValidationLayers)
         DestroyDebugUtilMessengerEXT(m_Instance, m_DebugMessenger, nullptr);
@@ -496,6 +504,32 @@ void Game::createSwapChain()
     m_SwapChainExtent      = extent;
 }
 
+void Game::recreateSwapchain()
+{
+    //first wait for resources to be available
+    vkDeviceWaitIdle(m_LogicalDevice);
+
+    cleanupSwapchain();
+
+    createSwapChain();
+    createImageView();
+    createFramebuffer();
+}
+
+void Game::cleanupSwapchain()
+{
+    for (auto& buffer : m_vSwapchainFramebuffers)
+    {
+        vkDestroyFramebuffer(m_LogicalDevice, buffer, nullptr);
+        m_vSwapchainFramebuffers.clear();
+    }
+    for (auto imageView : m_vSwapChainImageViews) {
+        vkDestroyImageView(m_LogicalDevice, imageView, nullptr);
+    }
+    vkDestroySwapchainKHR(m_LogicalDevice, m_SwapChain, nullptr);
+
+}
+
 void Game::createImageView()
 {
     m_vSwapChainImageViews.resize(m_vSwapChainImages.size());
@@ -605,7 +639,7 @@ void Game::createGraphicsPipeline()
     rasterizer.rasterizerDiscardEnable = VK_FALSE; //dissables output to frameBuffer
     rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth               = 1.0f;
-    rasterizer.cullMode                = VK_CULL_MODE_BACK_BIT;
+    rasterizer.cullMode                = VK_CULL_MODE_NONE;
     rasterizer.depthBiasEnable         = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f;//optional when disabled
     rasterizer.depthBiasClamp          = 0.0f;//optional when disabled
@@ -817,15 +851,17 @@ void Game::createCommandPool()
     }
 }
 
-void Game::createCommandBuffer()
+void Game::createCommandBuffers()
 {
+    m_vCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = m_CommandPool;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = 1;
+    allocInfo.commandBufferCount = static_cast<uint32_t>(m_vCommandBuffers.size());
 
-    if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, &m_CommandBuffer) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, m_vCommandBuffers.data()) != VK_SUCCESS)
     {
         throw std::runtime_error("Allocation off command buffer failed");
     }
@@ -887,36 +923,44 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
 
 void Game::drawFrame()
 {
+
     //1. wait for previous frame
-    vkWaitForFences(m_LogicalDevice, 1, &m_InFlightFence, VK_TRUE, UINT32_MAX);
-    vkResetFences(m_LogicalDevice, 1, &m_InFlightFence);
+    vkWaitForFences(m_LogicalDevice, 1, &m_vInFlightFences[m_CurrentFrame], VK_TRUE, UINT32_MAX);
 
     //2.Aquire an image from the swap chain
     uint32_t imageIndex;
-    vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+    VkResult result = vkAcquireNextImageKHR(m_LogicalDevice, m_SwapChain, UINT64_MAX, m_vImageAvailableSemaphores[m_CurrentFrame], VK_NULL_HANDLE, &imageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+        recreateSwapchain();
+        return;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        throw std::runtime_error("failed to aquire swapchain image during drawframe");
+
+    vkResetFences(m_LogicalDevice, 1, &m_vInFlightFences[m_CurrentFrame]);
 
     //3.Recording the command buffer
-    vkResetCommandBuffer(m_CommandBuffer, 0);
-    recordCommandBuffer(m_CommandBuffer, imageIndex);
+    vkResetCommandBuffer(m_vCommandBuffers[m_CurrentFrame], 0);
+    recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex);
 
     //4. Submitting the command buffer
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { m_ImageAvailableSemaphore };
+    VkSemaphore waitSemaphores[]      = { m_vImageAvailableSemaphores[m_CurrentFrame] };
     VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitstages;
+    submitInfo.waitSemaphoreCount     = 1;
+    submitInfo.pWaitSemaphores        = waitSemaphores;
+    submitInfo.pWaitDstStageMask      = waitstages;
 
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &m_CommandBuffer;
+    submitInfo.commandBufferCount   = 1;
+    submitInfo.pCommandBuffers      = &m_vCommandBuffers[m_CurrentFrame];
 
-    VkSemaphore signalSemaphore[] = { m_RenderFinishedAvailableSemaphore };
+    VkSemaphore signalSemaphore[]   = { m_vRenderFinishedAvailableSemaphores[m_CurrentFrame] };
     submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphore;
+    submitInfo.pSignalSemaphores    = signalSemaphore;
 
-    if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_InFlightFence) != VK_SUCCESS)
+    if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_vInFlightFences[m_CurrentFrame]) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to submit the command buffer");
     }
@@ -933,25 +977,39 @@ void Game::drawFrame()
     presentInfo.pImageIndices = &imageIndex;
     presentInfo.pResults = nullptr; //optional
 
-    vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+    result = vkQueuePresentKHR(m_PresentQueue, &presentInfo);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResiezed)
+    {
+        m_FramebufferResiezed = false;
+        recreateSwapchain();
+        //return;
+    }
+    else if (result != VK_SUCCESS)
+        throw std::runtime_error("failed to present swapchain image during drawframe");
 
-
+    m_CurrentFrame = (m_CurrentFrame++) % MAX_FRAMES_IN_FLIGHT;
 }
 
 void Game::createSyncObjects()
 {
+    m_vInFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
+    m_vImageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+    m_vRenderFinishedAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
+
     VkSemaphoreCreateInfo semaphore{};
     semaphore.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
     VkFenceCreateInfo fence{};
     fence.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
     fence.flags = VK_FENCE_CREATE_SIGNALED_BIT; //this puts the value to true at the start, if we dont do this. the draw function will indefinitly wait for its signal
-
-    if (vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_ImageAvailableSemaphore) != VK_SUCCESS
-    || vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_RenderFinishedAvailableSemaphore) != VK_SUCCESS
-    || vkCreateFence(m_LogicalDevice, &fence, nullptr, &m_InFlightFence) != VK_SUCCESS)
+    
+    for (int i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
-        throw std::runtime_error("failed to create synchronological helpers");
+        if (vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_vImageAvailableSemaphores[i]) != VK_SUCCESS
+            || vkCreateSemaphore(m_LogicalDevice, &semaphore, nullptr, &m_vRenderFinishedAvailableSemaphores[i]) != VK_SUCCESS
+            || vkCreateFence(m_LogicalDevice, &fence, nullptr, &m_vInFlightFences[i]) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create synchronological helpers");
+        }
     }
-
 }

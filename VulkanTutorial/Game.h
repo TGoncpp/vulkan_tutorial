@@ -44,6 +44,8 @@ class Game
 public:
     void run();
    
+    bool m_FramebufferResiezed{ false };
+
 private:
     //Window variables
     GLFWwindow* m_Window = nullptr;
@@ -72,16 +74,23 @@ private:
     VkPipeline m_GraphicsPipeline;
     std::vector<VkFramebuffer> m_vSwapchainFramebuffers;
     VkCommandPool m_CommandPool;
-    VkCommandBuffer m_CommandBuffer;
+    std::vector<VkCommandBuffer> m_vCommandBuffers;
 
-    VkSemaphore m_ImageAvailableSemaphore;
-    VkSemaphore m_RenderFinishedAvailableSemaphore;
-    VkFence m_InFlightFence;
+    std::vector < VkSemaphore> m_vImageAvailableSemaphores;
+    std::vector < VkSemaphore> m_vRenderFinishedAvailableSemaphores;
+    std::vector < VkFence> m_vInFlightFences;
+
+
+
+    //gloabal variables for keeping track off rendering frames and the max off frames to deal with
+    const int MAX_FRAMES_IN_FLIGHT = 2;
+    uint32_t m_CurrentFrame        = 0;
 
 
     //-----------------------------------------------------------
     //Main functions
     void initWindow();
+    static void framebufferResizeCallBack(GLFWwindow* window, int width, int height);
     
     //create an instance to create a link between the application and the Vulkan library
     void initVulkan();
@@ -133,6 +142,9 @@ private:
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& availableExtents);
     //creating the swapchain
     void createSwapChain();
+    //this is used for when surface become invallid and needs to recalculate
+    void recreateSwapchain();
+    void cleanupSwapchain();
 
     //IMAGE VIEW
     void createImageView();
@@ -151,7 +163,7 @@ private:
     //----------------------------------
     void createFramebuffer();
     void createCommandPool();
-    void createCommandBuffer();
+    void createCommandBuffers();
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void drawFrame();
 
