@@ -81,12 +81,18 @@ private:
     std::vector < VkFence> m_vInFlightFences;
 
     const std::vector<Vertex> m_vVertices = {
-           {{0.0f, -0.5f}, {1.0f, 1.0f, 1.0f}},
-           {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-           {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+          {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+          {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+          {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+          {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
            };
+    const std::vector<uint16_t> m_vIndices = { //use uint32_t when amount get above 65535
+             0, 1, 2, 2, 3, 0
+    };
     VkBuffer m_VertexBuffer;
     VkDeviceMemory m_VertexBufferMemory;
+    VkBuffer m_IndexBuffer;
+    VkDeviceMemory m_IndexBufferMemory;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -177,9 +183,10 @@ private:
     //SEMAPHORE AND FENCE
     void createSyncObjects();
 
-    //VERTEX BUFFER
+    //BUFFERS
     void createVertexBuffer();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+    void createIndexBuffer();
 
     //Abstraction
     void createBuffer(VkDeviceSize bufferSize, 

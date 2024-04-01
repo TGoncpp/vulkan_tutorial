@@ -51,6 +51,7 @@ void Game::initVulkan()
     createFramebuffer();
     createCommandPool();
     createVertexBuffer();
+    createIndexBuffer();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -69,6 +70,8 @@ void Game::cleanup()
 {
     cleanupSwapchain();
 
+    vkDestroyBuffer(m_LogicalDevice, m_IndexBuffer, nullptr);
+    vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
     vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
     vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
     vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
@@ -935,8 +938,10 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     VkBuffer vertexBuffers[] = { m_VertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
-    vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);
+    //vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);   -> When not using an index buffer
+    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_vIndices.size()), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -1088,6 +1093,33 @@ uint32_t Game::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags propert
     }
 
     throw std::runtime_error("failed to find suitable memory type");
+}
+
+void Game::createIndexBuffer()
+{
+    VkDeviceSize bufferSize = sizeof(m_vIndices[0]) * m_vIndices.size();
+    VkBuffer stagingBuffer;
+    VkDeviceMemory staginBufferMemory;
+    createBuffer(bufferSize, 
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
+                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 
+                stagingBuffer, staginBufferMemory);
+
+    void* data;
+    vkMapMemory(m_LogicalDevice, staginBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, m_vIndices.data(), static_cast<size_t>(bufferSize));
+    vkUnmapMemory(m_LogicalDevice, staginBufferMemory);
+
+    createBuffer(bufferSize,
+                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                m_IndexBuffer, m_IndexBufferMemory);
+
+    copyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);
+
+    vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(m_LogicalDevice, staginBufferMemory, nullptr);
+
 }
 
 void Game::createBuffer(VkDeviceSize bufferSize, 
