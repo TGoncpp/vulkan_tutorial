@@ -47,11 +47,13 @@ void Game::initVulkan()
     createSwapChain();
     createImageView();
     createRenderPass();
+    createDescriptorSetLayout();
     createGraphicsPipeline();
     createFramebuffer();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
+    createUniformBuffers();
     createCommandBuffers();
     createSyncObjects();
 }
@@ -70,6 +72,11 @@ void Game::cleanup()
 {
     cleanupSwapchain();
 
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        vkDestroyBuffer(m_LogicalDevice, m_vUniformBuffers[i], nullptr);
+        vkFreeMemory(m_LogicalDevice, m_vUniformBuffersMemory[i], nullptr);
+    }
+    vkDestroyDescriptorSetLayout(m_LogicalDevice, m_DescriptorSetLayout, nullptr);
     vkDestroyBuffer(m_LogicalDevice, m_IndexBuffer, nullptr);
     vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
     vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
@@ -700,8 +707,8 @@ void Game::createGraphicsPipeline()
     //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
     VkPipelineLayoutCreateInfo pipelineLayout{};
     pipelineLayout.sType                   = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayout.pSetLayouts             = 0;//optional
-    pipelineLayout.pSetLayouts             = nullptr;//optional
+    pipelineLayout.setLayoutCount          = 1;
+    pipelineLayout.pSetLayouts             = &m_DescriptorSetLayout;
     pipelineLayout.pushConstantRangeCount  = 0;//optional
     pipelineLayout.pPushConstantRanges     = nullptr;//optional
 
@@ -976,6 +983,9 @@ void Game::drawFrame()
     vkResetCommandBuffer(m_vCommandBuffers[m_CurrentFrame], 0);
     recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex);
 
+    //3.5 Upadate transformation on image
+    updateUniformBuffer(m_CurrentFrame);
+
     //4. Submitting the command buffer
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1122,6 +1132,28 @@ void Game::createIndexBuffer()
 
 }
 
+void Game::createUniformBuffers()
+{
+    VkDeviceSize bufferSize = sizeof(m_vUniformBuffers);
+    m_vUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    m_vUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    m_vUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+
+    // no need to assign a staging buffer since we plan to update this every frame, which would cause it to be slower
+    for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        createBuffer(bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_vUniformBuffers[i], m_vUniformBuffersMemory[i]);
+        vkMapMemory(m_LogicalDevice, m_vUniformBuffersMemory[i], 0, bufferSize, 0, &m_vUniformBuffersMapped[i]);
+        //Will be mapped until end off aplication -> called: Persistent Mapping
+        //Maps only at creation instead off every frame
+    }
+
+
+}
+
 void Game::createBuffer(VkDeviceSize bufferSize, 
                     VkBufferUsageFlags flags, 
                     VkMemoryPropertyFlags memryProps, 
@@ -1194,5 +1226,43 @@ void Game::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     //clean up the temp commandbuffer
     vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);
 
+
+}
+
+void Game::createDescriptorSetLayout()
+{
+    VkDescriptorSetLayoutBinding uboLayoutDescription{};
+    uboLayoutDescription.binding = 0;
+    uboLayoutDescription.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutDescription.descriptorCount = 1;
+    uboLayoutDescription.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutDescription.pImmutableSamplers = nullptr;//only relevant for image sampling
+
+    VkDescriptorSetLayoutCreateInfo uboInfo{};
+    uboInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uboInfo.bindingCount = 1;
+    uboInfo.pBindings = &uboLayoutDescription;
+
+    if(vkCreateDescriptorSetLayout(m_LogicalDevice, &uboInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
+    {
+        throw std::runtime_error{ "failed to create descriptor set layout" };
+    }
+}
+
+void Game::updateUniformBuffer(uint32_t currentImage)
+{
+    static auto start = std::chrono::high_resolution_clock::now();
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - start).count();
+
+    UniformBufferObject ubo{};
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.view = glm::lookAt(m_CameraPos, m_WorldCenter, glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    ubo.proj = glm::perspective(m_FieldOfView, m_SwapChainExtent.width / (float)m_SwapChainExtent.height, m_NearPlane, m_FarPlane);
+
+    ubo.proj[1][1] *= -1; // flip the y-axis. now it wil be from bottom(0) to top(1)
+
+    //Copy the data in to the current Uniform buffer object
+    memcpy(m_vUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 
 }

@@ -4,6 +4,11 @@
 //GLFW is interface for window Handle
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#define GLM_FORCE_RADIANS
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
 
 #include <memory> //used for RAI manegment
 
@@ -70,6 +75,7 @@ private:
     VkExtent2D m_SwapChainExtent;
     std::vector<VkImageView> m_vSwapChainImageViews;
     VkRenderPass m_RenderPass;
+    VkDescriptorSetLayout m_DescriptorSetLayout;
     VkPipelineLayout m_PipelineLayout;
     VkPipeline m_GraphicsPipeline;
     std::vector<VkFramebuffer> m_vSwapchainFramebuffers;
@@ -93,11 +99,19 @@ private:
     VkDeviceMemory m_VertexBufferMemory;
     VkBuffer m_IndexBuffer;
     VkDeviceMemory m_IndexBufferMemory;
+    std::vector<VkBuffer> m_vUniformBuffers;
+    std::vector<VkDeviceMemory> m_vUniformBuffersMemory;
+    std::vector<void*> m_vUniformBuffersMapped;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
     uint32_t m_CurrentFrame        = 0;
 
+    glm::vec3 m_CameraPos{ 2.0f, 2.0f, 2.0f };
+    glm::vec3 m_WorldCenter{ 0.0f, 0.0f, 0.0f };
+    float m_FieldOfView{ glm::radians(45.f) };
+    float m_NearPlane{ 0.1f };
+    float m_FarPlane{ 10.0f };
 
 
     //-----------------------------------------------------------
@@ -187,6 +201,7 @@ private:
     void createVertexBuffer();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createIndexBuffer();
+    void createUniformBuffers();
 
     //Abstraction
     void createBuffer(VkDeviceSize bufferSize, 
@@ -195,5 +210,11 @@ private:
         VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory);
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
+    //Descripters
+    void createDescriptorSetLayout();
+
+
+    //UPDATE
+    void updateUniformBuffer(uint32_t currentImage);
 
 };
