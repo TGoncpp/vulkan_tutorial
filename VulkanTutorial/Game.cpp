@@ -49,11 +49,15 @@ void Game::initVulkan()
     createRenderPass();
     createDescriptorSetLayout();
     createGraphicsPipeline();
+
     createFramebuffer();
     createCommandPool();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
+    createDescriptorPool();
+    createDescriptorSets();
+
     createCommandBuffers();
     createSyncObjects();
 }
@@ -76,6 +80,7 @@ void Game::cleanup()
         vkDestroyBuffer(m_LogicalDevice, m_vUniformBuffers[i], nullptr);
         vkFreeMemory(m_LogicalDevice, m_vUniformBuffersMemory[i], nullptr);
     }
+    vkDestroyDescriptorPool(m_LogicalDevice, m_DescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_LogicalDevice, m_DescriptorSetLayout, nullptr);
     vkDestroyBuffer(m_LogicalDevice, m_IndexBuffer, nullptr);
     vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
@@ -615,13 +620,13 @@ void Game::createGraphicsPipeline()
     //Dynamic state
     std::vector<VkDynamicState> vDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
     VkPipelineDynamicStateCreateInfo dynamicInfo{};
-    dynamicInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo.dynamicStateCount = static_cast<uint32_t>(vDynamicStates.size());
-    dynamicInfo.pDynamicStates = vDynamicStates.data();
+    dynamicInfo.sType                    = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicInfo.dynamicStateCount        = static_cast<uint32_t>(vDynamicStates.size());
+    dynamicInfo.pDynamicStates           = vDynamicStates.data();
 
     //vertex format info 
-    auto bindingDescription = Vertex::getBindDescription();
-    auto attributeDescription = Vertex::getAttributeDescriptions();
+    auto bindingDescription            = Vertex::getBindDescription();
+    auto attributeDescription          = Vertex::getAttributeDescriptions();
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -665,7 +670,8 @@ void Game::createGraphicsPipeline()
     rasterizer.rasterizerDiscardEnable = VK_FALSE; //dissables output to frameBuffer
     rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
     rasterizer.lineWidth               = 1.0f;
-    rasterizer.cullMode                = VK_CULL_MODE_NONE;
+    rasterizer.cullMode                = VK_CULL_MODE_BACK_BIT;
+    rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.depthBiasEnable         = VK_FALSE;
     rasterizer.depthBiasConstantFactor = 0.0f;//optional when disabled
     rasterizer.depthBiasClamp          = 0.0f;//optional when disabled
@@ -694,15 +700,15 @@ void Game::createGraphicsPipeline()
 
     //Color blending
     VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable = VK_FALSE;
-    colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments = &colorBlendAttachment;
-    colorBlending.blendConstants[0] = 0.0f; // Optional
-    colorBlending.blendConstants[1] = 0.0f; // Optional
-    colorBlending.blendConstants[2] = 0.0f; // Optional
-    colorBlending.blendConstants[3] = 0.0f; // Optional
+    colorBlending.sType               = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlending.logicOpEnable       = VK_FALSE;
+    colorBlending.logicOp             = VK_LOGIC_OP_COPY; // Optional
+    colorBlending.attachmentCount     = 1;
+    colorBlending.pAttachments        = &colorBlendAttachment;
+    colorBlending.blendConstants[0]   = 0.0f; // Optional
+    colorBlending.blendConstants[1]   = 0.0f; // Optional
+    colorBlending.blendConstants[2]   = 0.0f; // Optional
+    colorBlending.blendConstants[3]   = 0.0f; // Optional
 
     //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
     VkPipelineLayoutCreateInfo pipelineLayout{};
@@ -733,12 +739,12 @@ void Game::createGraphicsPipeline()
     pipelineInfo.pColorBlendState      = &colorBlending;
     pipelineInfo.pDynamicState         = &dynamicInfo;
     //layout
-    pipelineInfo.layout = m_PipelineLayout;
+    pipelineInfo.layout                = m_PipelineLayout;
     //Render pass
-    pipelineInfo.renderPass = m_RenderPass;
-    pipelineInfo.subpass = 0; //index
-    pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; //optional
-    pipelineInfo.basePipelineIndex = -1; //optional
+    pipelineInfo.renderPass            = m_RenderPass;
+    pipelineInfo.subpass               = 0; //index
+    pipelineInfo.basePipelineHandle    = VK_NULL_HANDLE; //optional
+    pipelineInfo.basePipelineIndex     = -1; //optional
 
     if (vkCreateGraphicsPipelines(m_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
     {
@@ -947,6 +953,14 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+    //bind descriptors to the current frame
+    vkCmdBindDescriptorSets(commandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        m_PipelineLayout,
+        0, 1, &m_vDescriptorSets[m_CurrentFrame],
+        0, nullptr);
+
+
     //vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);   -> When not using an index buffer
     vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_vIndices.size()), 1, 0, 0, 0);
 
@@ -984,7 +998,7 @@ void Game::drawFrame()
     recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex);
 
     //3.5 Upadate transformation on image
-    updateUniformBuffer(m_CurrentFrame);
+    updateUniformBuffer(m_CurrentFrame); //-> update the descriptor
 
     //4. Submitting the command buffer
     VkSubmitInfo submitInfo{};
@@ -1134,7 +1148,7 @@ void Game::createIndexBuffer()
 
 void Game::createUniformBuffers()
 {
-    VkDeviceSize bufferSize = sizeof(m_vUniformBuffers);
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
     m_vUniformBuffers.resize(MAX_FRAMES_IN_FLIGHT);
     m_vUniformBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
     m_vUniformBuffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1152,6 +1166,66 @@ void Game::createUniformBuffers()
     }
 
 
+}
+
+void Game::createDescriptorPool()
+{
+    VkDescriptorPoolSize poolSize{};
+    poolSize.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount   = 1;
+    poolInfo.pPoolSizes      = &poolSize;
+    poolInfo.maxSets         = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolInfo.flags           = 0;
+
+    if (vkCreateDescriptorPool(m_LogicalDevice, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS)
+    {
+        throw std::runtime_error{ "failed to create decriptor pool" };
+    }
+
+}
+
+void Game::createDescriptorSets()
+{
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, m_DescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool     = m_DescriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfo.pSetLayouts        = layouts.data();
+
+    m_vDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    if (vkAllocateDescriptorSets(m_LogicalDevice, &allocInfo, m_vDescriptorSets.data()) != VK_SUCCESS)
+    {
+        throw std::runtime_error{ "failed to allocate discriptorSets" };
+    }
+    //will be destroyed automaticly when descriptorpool is destroyed
+
+    for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
+    {
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer    = m_vUniformBuffers[i];
+        bufferInfo.offset    = 0;
+        bufferInfo.range     = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet          = m_vDescriptorSets[i];
+        descriptorWrite.dstBinding      = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo     = &bufferInfo;
+        descriptorWrite.pImageInfo = nullptr;
+        descriptorWrite.pTexelBufferView = nullptr;
+
+        vkUpdateDescriptorSets(m_LogicalDevice, 1, &descriptorWrite, 0, nullptr);
+
+
+    }
 }
 
 void Game::createBuffer(VkDeviceSize bufferSize, 
@@ -1232,16 +1306,16 @@ void Game::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 void Game::createDescriptorSetLayout()
 {
     VkDescriptorSetLayoutBinding uboLayoutDescription{};
-    uboLayoutDescription.binding = 0;
-    uboLayoutDescription.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    uboLayoutDescription.descriptorCount = 1;
-    uboLayoutDescription.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    uboLayoutDescription.binding            = 0;
+    uboLayoutDescription.descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutDescription.descriptorCount    = 1;
+    uboLayoutDescription.stageFlags         = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutDescription.pImmutableSamplers = nullptr;//only relevant for image sampling
 
     VkDescriptorSetLayoutCreateInfo uboInfo{};
-    uboInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    uboInfo.bindingCount = 1;
-    uboInfo.pBindings = &uboLayoutDescription;
+    uboInfo.sType            = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uboInfo.bindingCount     = 1;
+    uboInfo.pBindings        = &uboLayoutDescription;
 
     if(vkCreateDescriptorSetLayout(m_LogicalDevice, &uboInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
     {

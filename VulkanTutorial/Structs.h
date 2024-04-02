@@ -1,5 +1,7 @@
 #pragma once
 #include <optional> //c++ wrapper to give the option to a variable to have no value
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <array>
 
@@ -52,7 +54,8 @@ struct Vertex
 
 struct UniformBufferObject
 {
-	glm::mat4 model;
-	glm::mat4 view;
-	glm::mat4 proj;
+	alignas(16) glm::mat4 model; //-> when not using the define off force aligned gentypes
+	alignas(16) glm::mat4 view; // But it can break when using nested variables, (like selfmade structs)
+	alignas(16) glm::mat4 proj; //Safer to always manually allign
+
 };

@@ -4,8 +4,8 @@
 //GLFW is interface for window Handle
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-#define GLM_FORCE_RADIANS
-#include <glm/glm.hpp>
+//#define GLM_FORCE_RADIANS
+//#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <chrono>
@@ -102,6 +102,8 @@ private:
     std::vector<VkBuffer> m_vUniformBuffers;
     std::vector<VkDeviceMemory> m_vUniformBuffersMemory;
     std::vector<void*> m_vUniformBuffersMapped;
+    VkDescriptorPool m_DescriptorPool;
+    std::vector<VkDescriptorSet> m_vDescriptorSets;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -202,6 +204,8 @@ private:
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createIndexBuffer();
     void createUniformBuffers();
+    void createDescriptorPool();
+    void createDescriptorSets();
 
     //Abstraction
     void createBuffer(VkDeviceSize bufferSize, 
