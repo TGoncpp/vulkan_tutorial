@@ -107,6 +107,9 @@ private:
     std::vector<VkDescriptorSet> m_vDescriptorSets;
     VkImage m_TextureDaeImage;
     VkDeviceMemory m_TextureDaeImageMemory;
+    VkImageView m_TextureImageView;
+    VkSampler m_TextureSampler;
+
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -178,7 +181,7 @@ private:
     void cleanupSwapchain();
 
     //IMAGE VIEW
-    void createImageView();
+    void createImageViews();
 
     //PIPELINE
     //-------------------------------
@@ -229,11 +232,17 @@ private:
                      VkFormat format, VkImageTiling tiling,
                      VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
                      VkImage& image, VkDeviceMemory& imageMemory);
-    void transitionImageLayout(VkImage image, VkFormat format, 
-                                VkImageLayout oldLayout, VkImageLayout newLayout);
+    void createTextureImageView();
+    void createTextureSampler();
 
     //helper functions
     VkCommandBuffer beginSingleCommands();
     void endSingleCommands(VkCommandBuffer commandBuffer);
     void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+    void transitionImageLayout(VkImage image, VkFormat format, 
+                                VkImageLayout oldLayout, VkImageLayout newLayout);
+
+    VkImageView createImageView(VkImage image, VkFormat format);
+
+
 };
