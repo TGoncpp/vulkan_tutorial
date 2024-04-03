@@ -8,6 +8,7 @@
 //#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+
 #include <chrono>
 
 #include <memory> //used for RAI manegment
@@ -104,6 +105,8 @@ private:
     std::vector<void*> m_vUniformBuffersMapped;
     VkDescriptorPool m_DescriptorPool;
     std::vector<VkDescriptorSet> m_vDescriptorSets;
+    VkImage m_TextureDaeImage;
+    VkDeviceMemory m_TextureDaeImageMemory;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -114,7 +117,6 @@ private:
     float m_FieldOfView{ glm::radians(45.f) };
     float m_NearPlane{ 0.1f };
     float m_FarPlane{ 10.0f };
-
 
     //-----------------------------------------------------------
     //Main functions
@@ -221,4 +223,17 @@ private:
     //UPDATE
     void updateUniformBuffer(uint32_t currentImage);
 
+    //TEXTURES
+    void createTextureImage();
+    void createImage(uint32_t width, uint32_t height,
+                     VkFormat format, VkImageTiling tiling,
+                     VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
+                     VkImage& image, VkDeviceMemory& imageMemory);
+    void transitionImageLayout(VkImage image, VkFormat format, 
+                                VkImageLayout oldLayout, VkImageLayout newLayout);
+
+    //helper functions
+    VkCommandBuffer beginSingleCommands();
+    void endSingleCommands(VkCommandBuffer commandBuffer);
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
 };

@@ -9,12 +9,11 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
-    <Filter Include="Resource Files">
-      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
-      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
-    </Filter>
     <Filter Include="shader">
       <UniqueIdentifier>{c29ab6c5-21d7-4e2f-b582-d6bb175f01df}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="textures">
+      <UniqueIdentifier>{1030b788-6ec3-4f08-805a-08e1127b62e1}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -37,19 +36,24 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="shader.vert">
+    <Image Include="textures\dae.jpg">
+      <Filter>textures</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\compile.bat">
       <Filter>shader</Filter>
     </None>
-    <None Include="shader.frag">
+    <None Include="shader\frag.spv">
       <Filter>shader</Filter>
     </None>
-    <None Include="compile.bat">
+    <None Include="shader\shader.frag">
       <Filter>shader</Filter>
     </None>
-    <None Include="shader2.vert">
+    <None Include="shader\shader.vert">
       <Filter>shader</Filter>
     </None>
-    <None Include="shader2.frag">
+    <None Include="shader\vert.spv">
       <Filter>shader</Filter>
     </None>
   </ItemGroup>

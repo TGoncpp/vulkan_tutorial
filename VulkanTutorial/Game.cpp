@@ -3,6 +3,10 @@
 #include<algorithm>     // for clamp
 #include <limits>       //for numeric_limits
 //#include <cstdint>      // for uint32_t
+#define STB_IMAGE_IMPLEMENTATION // somehow gives LINK errors instead off solving them
+#include <stb_image.h>
+
+
 
 #include <fstream>
 #include <filesystem>
@@ -52,6 +56,7 @@ void Game::initVulkan()
 
     createFramebuffer();
     createCommandPool();
+    createTextureImage();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -75,6 +80,9 @@ void Game::mainLoop()
 void Game::cleanup()
 {
     cleanupSwapchain();
+
+    vkDestroyImage(m_LogicalDevice, m_TextureDaeImage, nullptr);
+    vkFreeMemory(m_LogicalDevice, m_TextureDaeImageMemory, nullptr);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(m_LogicalDevice, m_vUniformBuffers[i], nullptr);
@@ -590,8 +598,8 @@ void Game::createImageView()
 
 void Game::createGraphicsPipeline()
 {
-    auto vertShader = readFile("vert.spv");
-    auto fragShader = readFile("frag.spv");
+    auto vertShader = readFile("shader/vert.spv");
+    auto fragShader = readFile("shader/frag.spv");
 
     //create module to help transfer code to pipeline
     VkShaderModule vertShaderModule =  createShaderModule(vertShader);
@@ -955,10 +963,10 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
 
     //bind descriptors to the current frame
     vkCmdBindDescriptorSets(commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        m_PipelineLayout,
-        0, 1, &m_vDescriptorSets[m_CurrentFrame],
-        0, nullptr);
+                             VK_PIPELINE_BIND_POINT_GRAPHICS,
+                             m_PipelineLayout,
+                             0, 1, &m_vDescriptorSets[m_CurrentFrame],
+                             0, nullptr);
 
 
     //vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);   -> When not using an index buffer
@@ -1260,22 +1268,7 @@ void Game::createBuffer(VkDeviceSize bufferSize,
 
 void Game::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
 {
-    //Allocate temp command buffer
-    VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool        = m_CommandPool;
-    allocInfo.commandBufferCount = 1;
-
-    VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, &commandBuffer);
-
-    //record temp commandBuffer
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VkCommandBuffer commandBuffer = beginSingleCommands();
 
     //Copy
     VkBufferCopy copyRegion{};
@@ -1285,20 +1278,7 @@ void Game::copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size)
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
     //Stop recording
-    vkEndCommandBuffer(commandBuffer);
-
-    //Excecute Command
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers    = &commandBuffer;
-    
-    vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(m_GraphicsQueue); // there are no draw commands so no need to put fences/Semaphores to wait .BUT have to wait for transfer data
-                                      //Can use fences for a more cheduled wait instead of one by one with the waitIdle
-
-    //clean up the temp commandbuffer
-    vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);
+    endSingleCommands(commandBuffer);
 
 
 }
@@ -1326,17 +1306,222 @@ void Game::createDescriptorSetLayout()
 void Game::updateUniformBuffer(uint32_t currentImage)
 {
     static auto start = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - start).count();
+    auto currentTime  = std::chrono::high_resolution_clock::now();
+    float time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - start).count();
 
     UniformBufferObject ubo{};
     ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(m_CameraPos, m_WorldCenter, glm::vec3(0.0f, 0.0f, 1.0f));// up vector
-    ubo.proj = glm::perspective(m_FieldOfView, m_SwapChainExtent.width / (float)m_SwapChainExtent.height, m_NearPlane, m_FarPlane);
+    ubo.view  = glm::lookAt(m_CameraPos, m_WorldCenter, glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    ubo.proj  = glm::perspective(m_FieldOfView, m_SwapChainExtent.width / (float)m_SwapChainExtent.height, m_NearPlane, m_FarPlane);
 
     ubo.proj[1][1] *= -1; // flip the y-axis. now it wil be from bottom(0) to top(1)
 
     //Copy the data in to the current Uniform buffer object
     memcpy(m_vUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+
+}
+
+void Game::createTextureImage()
+{
+    //load image
+    int texWidth{}, textHeight{}, textChannels{};
+    stbi_uc* pixels = stbi_load("textures/dae.jpg", &texWidth, &textHeight, &textChannels, STBI_rgb_alpha);
+    VkDeviceSize imageSize = texWidth * textHeight * 4;
+
+    if (!pixels)
+    {
+        throw std::runtime_error{ "failed to load texture image" };
+    }
+
+    //create staging buffer to load in host memory
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingbufferMemory;
+    createBuffer(imageSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+        stagingBuffer, stagingbufferMemory);
+
+    void* data;
+    vkMapMemory(m_LogicalDevice, stagingbufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    vkUnmapMemory(m_LogicalDevice, stagingbufferMemory);
+    
+    stbi_image_free(pixels);
+
+    //create image to transfer to and bind
+    createImage(texWidth, textHeight,
+        VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        m_TextureDaeImage, m_TextureDaeImageMemory);
+
+    transitionImageLayout(m_TextureDaeImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(stagingBuffer, m_TextureDaeImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(textHeight));
+    transitionImageLayout(m_TextureDaeImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    
+    vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
+    vkFreeMemory(m_LogicalDevice, stagingbufferMemory, nullptr);
+}
+
+void Game::createImage(uint32_t width, uint32_t height, 
+    VkFormat format, VkImageTiling tiling, 
+    VkImageUsageFlags usage, VkMemoryPropertyFlags properties, 
+    VkImage& image, VkDeviceMemory& imageMemory)
+{
+    VkImageCreateInfo imageInfo{};
+    imageInfo.sType          = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageInfo.imageType      = VK_IMAGE_TYPE_2D;
+    imageInfo.extent.width   = static_cast<uint32_t>(width);
+    imageInfo.extent.height  = static_cast<uint32_t>(height);
+    imageInfo.extent.depth   = 1;
+    imageInfo.mipLevels      = 1;
+    imageInfo.arrayLayers    = 1;
+    imageInfo.format         = format; //!!use same format as used with the pixels
+    imageInfo.tiling         = tiling; //use LINEAR if you want direct acces to the pixels
+    imageInfo.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
+    imageInfo.usage          = usage;
+    imageInfo.sharingMode    = VK_SHARING_MODE_EXCLUSIVE;
+    imageInfo.samples        = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.flags          = 0;
+
+    if (vkCreateImage(m_LogicalDevice, &imageInfo, nullptr, &m_TextureDaeImage) != VK_SUCCESS)
+    {
+        throw std::runtime_error{ "failed to create image" };
+    }
+
+    //transfer to fast allocation memory
+    VkMemoryRequirements memRequirements;
+    vkGetImageMemoryRequirements(m_LogicalDevice, m_TextureDaeImage, &memRequirements);
+
+    VkMemoryAllocateInfo allocInfo{};
+    allocInfo.sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize  = memRequirements.size;
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+
+    if (vkAllocateMemory(m_LogicalDevice, &allocInfo, nullptr, &m_TextureDaeImageMemory) != VK_SUCCESS)
+    {
+        throw std::runtime_error{ "failed to allocate image memory" };
+    }
+
+    vkBindImageMemory(m_LogicalDevice, image, imageMemory, 0);
+
+}
+
+void Game::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+{
+    VkCommandBuffer commandbuffer = beginSingleCommands();
+
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = 0;
+    VkPipelineStageFlags srceStage;
+    VkPipelineStageFlags dstStage;
+
+    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED 
+        && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+    {
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        srceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+        dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+        && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+    {
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        srceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    else
+    {
+        throw std::invalid_argument("unsupported layout transition!");
+    }
+
+    vkCmdPipelineBarrier(
+        commandbuffer,
+       srceStage, dstStage,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1, &barrier
+    );
+
+    endSingleCommands(commandbuffer);
+
+}
+
+VkCommandBuffer Game::beginSingleCommands()
+{
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandPool        = m_CommandPool;
+    allocInfo.commandBufferCount = 1;
+
+    VkCommandBuffer commandBuffer;
+    vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, &commandBuffer);
+
+    VkCommandBufferBeginInfo beginInfo{};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+    return commandBuffer;
+}
+
+void Game::endSingleCommands(VkCommandBuffer commandBuffer)
+{
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType              = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers    = &commandBuffer;
+
+    vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(m_GraphicsQueue);
+
+    vkFreeCommandBuffers(m_LogicalDevice, m_CommandPool, 1, &commandBuffer);
+
+}
+
+void Game::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
+{
+    VkCommandBuffer commandBuffer = beginSingleCommands();
+
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+
+    region.imageOffset = { 0,0,0 };
+    region.imageExtent = { width, height, 1 };
+
+    vkCmdCopyBufferToImage(commandBuffer, buffer, image, 
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+    endSingleCommands(commandBuffer);
 
 }

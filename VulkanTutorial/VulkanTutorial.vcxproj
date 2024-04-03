@@ -106,7 +106,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\glm-1.0.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\glm-1.0.0;C:\DAEGit\vulkan_tutorial\VulkanTutorial\stb-master\stb-master;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -124,7 +124,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\glm-1.0.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)\VulkanSDK\1.3.261.1\Include;$(SolutionDir)\glfw-3.4.bin.WIN64\glfw-3.4.bin.WIN64\include;$(SolutionDir)\glm-1.0.0;C:\DAEGit\vulkan_tutorial\VulkanTutorial\stb-master\stb-master;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
     </ClCompile>
     <Link>
@@ -146,11 +146,14 @@
     <ClInclude Include="Structs.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="compile.bat" />
-    <None Include="shader.frag" />
-    <None Include="shader.vert" />
-    <None Include="shader2.frag" />
-    <None Include="shader2.vert" />
+    <Image Include="textures\dae.jpg" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\compile.bat" />
+    <None Include="shader\frag.spv" />
+    <None Include="shader\shader.frag" />
+    <None Include="shader\shader.vert" />
+    <None Include="shader\vert.spv" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
