@@ -88,10 +88,10 @@ private:
     std::vector < VkFence> m_vInFlightFences;
 
     const std::vector<Vertex> m_vVertices = {
-          {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-          {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-          {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-          {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+          {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+          {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+          {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+          {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
            };
     const std::vector<uint16_t> m_vIndices = { //use uint32_t when amount get above 65535
              0, 1, 2, 2, 3, 0

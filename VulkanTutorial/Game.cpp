@@ -621,7 +621,7 @@ void Game::createGraphicsPipeline()
     auto attributeDescription          = Vertex::getAttributeDescriptions();
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.vertexBindingDescriptionCount   = 1;
     vertexInputInfo.pVertexBindingDescriptions      = &bindingDescription;
     vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescription.size());
@@ -1162,14 +1162,17 @@ void Game::createUniformBuffers()
 
 void Game::createDescriptorPool()
 {
-    VkDescriptorPoolSize poolSize{};
-    poolSize.type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSize.descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0].type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+ 
+    poolSizes[1].type            = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType           = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount   = 1;
-    poolInfo.pPoolSizes      = &poolSize;
+    poolInfo.poolSizeCount   = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes      = poolSizes.data();
     poolInfo.maxSets         = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
     poolInfo.flags           = 0;
 
@@ -1202,19 +1205,34 @@ void Game::createDescriptorSets()
         bufferInfo.buffer    = m_vUniformBuffers[i];
         bufferInfo.offset    = 0;
         bufferInfo.range     = sizeof(UniformBufferObject);
+        
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView   = m_TextureImageView;
+        imageInfo.sampler     = m_TextureSampler;
 
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet          = m_vDescriptorSets[i];
-        descriptorWrite.dstBinding      = 0;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pBufferInfo     = &bufferInfo;
-        descriptorWrite.pImageInfo = nullptr;
-        descriptorWrite.pTexelBufferView = nullptr;
+        //here they get combined
+        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        descriptorWrites[0].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet          = m_vDescriptorSets[i];
+        descriptorWrites[0].dstBinding      = 0;
+        descriptorWrites[0].dstArrayElement = 0;
+        descriptorWrites[0].descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pBufferInfo     = &bufferInfo;
+        
+        descriptorWrites[1].sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[1].dstSet          = m_vDescriptorSets[i];
+        descriptorWrites[1].dstBinding      = 1;
+        descriptorWrites[1].dstArrayElement = 0;
+        descriptorWrites[1].descriptorType  = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pImageInfo      = &imageInfo;
+        
 
-        vkUpdateDescriptorSets(m_LogicalDevice, 1, &descriptorWrite, 0, nullptr);
+        vkUpdateDescriptorSets(m_LogicalDevice, 
+            static_cast<uint32_t>(descriptorWrites.size()), 
+            descriptorWrites.data(), 0, nullptr);
 
 
     }
@@ -1275,11 +1293,19 @@ void Game::createDescriptorSetLayout()
     uboLayoutDescription.descriptorCount    = 1;
     uboLayoutDescription.stageFlags         = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutDescription.pImmutableSamplers = nullptr;//only relevant for image sampling
+   
+    VkDescriptorSetLayoutBinding samplerLayoutDescription{};
+    samplerLayoutDescription.binding            = 1;
+    samplerLayoutDescription.descriptorType     = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutDescription.descriptorCount    = 1;
+    samplerLayoutDescription.stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT;
+    samplerLayoutDescription.pImmutableSamplers = nullptr;//only relevant for image sampling
 
+    std::array<VkDescriptorSetLayoutBinding, 2>  bindings = { uboLayoutDescription, samplerLayoutDescription };
     VkDescriptorSetLayoutCreateInfo uboInfo{};
     uboInfo.sType            = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    uboInfo.bindingCount     = 1;
-    uboInfo.pBindings        = &uboLayoutDescription;
+    uboInfo.bindingCount     = static_cast<uint32_t>(bindings.size());
+    uboInfo.pBindings        = bindings.data();
 
     if(vkCreateDescriptorSetLayout(m_LogicalDevice, &uboInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS)
     {
