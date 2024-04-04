@@ -4,10 +4,6 @@
 //GLFW is interface for window Handle
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-//#define GLM_FORCE_RADIANS
-//#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 
 #include <chrono>
 
@@ -88,13 +84,19 @@ private:
     std::vector < VkFence> m_vInFlightFences;
 
     const std::vector<Vertex> m_vVertices = {
-          {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-          {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-          {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-          {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-           };
+          {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
+          {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
+          {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
+          {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
+           ,
+        { {-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} },
+        { {0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },
+        { {0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f} },
+        { {-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} }
+    };
     const std::vector<uint16_t> m_vIndices = { //use uint32_t when amount get above 65535
-             0, 1, 2, 2, 3, 0
+             0, 1, 2, 2, 3, 0,
+             4, 5, 6, 6, 7, 4
     };
     VkBuffer m_VertexBuffer;
     VkDeviceMemory m_VertexBufferMemory;
@@ -109,6 +111,9 @@ private:
     VkDeviceMemory m_TextureDaeImageMemory;
     VkImageView m_TextureImageView;
     VkSampler m_TextureSampler;
+    VkImage m_DepthImage;
+    VkDeviceMemory m_DepthImageMemory;
+    VkImageView m_DepthImageView;
 
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
@@ -234,6 +239,7 @@ private:
                      VkImage& image, VkDeviceMemory& imageMemory);
     void createTextureImageView();
     void createTextureSampler();
+    void createDepthResources();
 
     //helper functions
     VkCommandBuffer beginSingleCommands();
@@ -242,7 +248,10 @@ private:
     void transitionImageLayout(VkImage image, VkFormat format, 
                                 VkImageLayout oldLayout, VkImageLayout newLayout);
 
-    VkImageView createImageView(VkImage image, VkFormat format);
+    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
+    VkFormat findDepthFormat();
+    bool hasStencilComponent(VkFormat format);
 
 
 };
