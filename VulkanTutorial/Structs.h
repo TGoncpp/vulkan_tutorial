@@ -4,6 +4,8 @@
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <array>
+#define GLM_ENABLE_EXPERIMENTAL //for hash mapping
+#include <glm/gtx/hash.hpp>
 
 struct QueueFamilyIndices
 {
@@ -57,7 +59,23 @@ struct Vertex
 		return attributeDescriptions;
 	}
 
+	bool operator ==(const Vertex& other)const
+	{
+		return pos == other.pos && color == other.color && texcoord == other.texcoord;
+	}
+
 };
+
+//CREATING A HASH FOR THE UNORDERD MAP IN THE LOAD OBJ
+namespace std {
+	template<> struct hash<Vertex> {
+		size_t operator()(Vertex const& vertex) const {
+			return ((hash<glm::vec3>()(vertex.pos) ^
+				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.texcoord) << 1);
+		}
+	};
+}
 
 struct UniformBufferObject
 {

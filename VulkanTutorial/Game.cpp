@@ -8,7 +8,9 @@
 #include <stb_image.h>
 #include <glm/gtc/matrix_transform.hpp>
 
-
+#define TINYOBJLOADER_IMPLEMENTATION
+#include <tiny_obj_loader.h> //obj parser
+#include <unordered_map>
 
 #include <fstream>
 #include <filesystem>
@@ -62,6 +64,7 @@ void Game::initVulkan()
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    loadModel();
     createVertexBuffer();
     createIndexBuffer();
     createUniformBuffers();
@@ -982,7 +985,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     VkBuffer vertexBuffers[] = { m_VertexBuffer };
     VkDeviceSize offsets[] = { 0 };
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
     //bind descriptors to the current frame
     vkCmdBindDescriptorSets(commandBuffer,
@@ -1359,7 +1362,7 @@ void Game::updateUniformBuffer(uint32_t currentImage)
     float time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - start).count();
 
     UniformBufferObject ubo{};
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view  = glm::lookAt(m_CameraPos, m_WorldCenter, glm::vec3(0.0f, 0.0f, 1.0f));// up vector
     ubo.proj  = glm::perspective(m_FieldOfView, m_SwapChainExtent.width / (float)m_SwapChainExtent.height, m_NearPlane, m_FarPlane);
 
@@ -1370,11 +1373,53 @@ void Game::updateUniformBuffer(uint32_t currentImage)
 
 }
 
+void Game::loadModel()
+{
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warningMessage, errorMessege;
+
+    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warningMessage, &errorMessege, m_ModelPath.c_str()))
+    {
+        throw std::runtime_error{ "failed to load in obj" + warningMessage + errorMessege};
+    }
+
+    std::unordered_map<Vertex, uint32_t> mUniqueVertexes{};
+    for (const auto& shape : shapes)
+    {
+        for (const auto& index : shape.mesh.indices)
+        {
+            Vertex vertex{};
+
+            vertex.pos = {
+                attrib.vertices[3 * index.vertex_index + 0],
+                attrib.vertices[3 * index.vertex_index + 1],
+                attrib.vertices[3 * index.vertex_index + 2]
+            };
+            vertex.texcoord = {
+                attrib.texcoords[2 * index.texcoord_index + 0],
+               1.0f - attrib.texcoords[2 * index.texcoord_index + 1] //1.0- is because we flip the y-axis in our settings
+            };
+            vertex.color = { 1.0f, 1.0f, 1.0f };
+
+            if (mUniqueVertexes.count(vertex) == 0)
+            {
+                mUniqueVertexes[vertex] = static_cast<uint32_t>(m_vVertices.size());
+                m_vVertices.push_back(vertex);
+            }
+
+            
+            m_vIndices.push_back(mUniqueVertexes[vertex]);
+        }
+    }
+}
+
 void Game::createTextureImage()
 {
     //load image
     int texWidth{}, textHeight{}, textChannels{};
-    stbi_uc* pixels = stbi_load("textures/dae.jpg", &texWidth, &textHeight, &textChannels, STBI_rgb_alpha);
+    stbi_uc* pixels = stbi_load(m_TexturePath.c_str(), &texWidth, &textHeight, &textChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * textHeight * 4;
 
     if (!pixels)

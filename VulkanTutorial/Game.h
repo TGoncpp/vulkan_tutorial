@@ -83,21 +83,8 @@ private:
     std::vector < VkSemaphore> m_vRenderFinishedAvailableSemaphores;
     std::vector < VkFence> m_vInFlightFences;
 
-    const std::vector<Vertex> m_vVertices = {
-          {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f}},
-          {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f}},
-          {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}},
-          {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f}}
-           ,
-        { {-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {1.0f, 0.0f} },
-        { {0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f} },
-        { {0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f} },
-        { {-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f} }
-    };
-    const std::vector<uint16_t> m_vIndices = { //use uint32_t when amount get above 65535
-             0, 1, 2, 2, 3, 0,
-             4, 5, 6, 6, 7, 4
-    };
+    std::vector<Vertex> m_vVertices;
+    std::vector<uint32_t> m_vIndices;//use uint32_t when amount get above 65535
     VkBuffer m_VertexBuffer;
     VkDeviceMemory m_VertexBufferMemory;
     VkBuffer m_IndexBuffer;
@@ -125,6 +112,11 @@ private:
     float m_FieldOfView{ glm::radians(45.f) };
     float m_NearPlane{ 0.1f };
     float m_FarPlane{ 10.0f };
+    float m_RotationSpeed{ 0.f };
+
+    //model
+    const std::string m_ModelPath{ "models/room.obj" };
+    const std::string m_TexturePath{ "textures/viking_room.png" };
 
     //-----------------------------------------------------------
     //Main functions
@@ -240,6 +232,9 @@ private:
     void createTextureImageView();
     void createTextureSampler();
     void createDepthResources();
+
+    //MODELS
+    void loadModel();
 
     //helper functions
     VkCommandBuffer beginSingleCommands();
