@@ -90,7 +90,7 @@ void Game::cleanup()
     cleanupSwapchain();
     vkDestroySampler(m_LogicalDevice, m_TextureSampler, nullptr);
     vkDestroyImageView(m_LogicalDevice, m_TextureImageView, nullptr);
-    vkDestroyImage(m_LogicalDevice, m_TextureDaeImage, nullptr);
+    vkDestroyImage(m_LogicalDevice, m_TextureImage, nullptr);
     vkFreeMemory(m_LogicalDevice, m_TextureDaeImageMemory, nullptr);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -587,7 +587,7 @@ void Game::createImageViews()
 
     for (size_t i = 0; i < m_vSwapChainImages.size(); i++) 
     {
-        m_vSwapChainImageViews[i] = createImageView(m_vSwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+        m_vSwapChainImageViews[i] = createImageView(m_vSwapChainImages[i], m_SwapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
     }
 }
 
@@ -1422,6 +1422,8 @@ void Game::createTextureImage()
     stbi_uc* pixels = stbi_load(m_TexturePath.c_str(), &texWidth, &textHeight, &textChannels, STBI_rgb_alpha);
     VkDeviceSize imageSize = texWidth * textHeight * 4;
 
+    m_MipLvl = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, textHeight)))) + 1;
+
     if (!pixels)
     {
         throw std::runtime_error{ "failed to load texture image" };
@@ -1443,21 +1445,22 @@ void Game::createTextureImage()
     stbi_image_free(pixels);
 
     //create image to transfer to and bind
-    createImage(texWidth, textHeight,
+    createImage(texWidth, textHeight, m_MipLvl,
         VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_TextureDaeImage, m_TextureDaeImageMemory);
+        m_TextureImage, m_TextureDaeImageMemory);
 
-    transitionImageLayout(m_TextureDaeImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(stagingBuffer, m_TextureDaeImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(textHeight));
-    transitionImageLayout(m_TextureDaeImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    
+    transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_MipLvl);
+    copyBufferToImage(stagingBuffer, m_TextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(textHeight));
+    //transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, m_MipLvl);
+    generateMipmaps(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, textHeight, m_MipLvl);
+
     vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
     vkFreeMemory(m_LogicalDevice, stagingbufferMemory, nullptr);
 }
 
-void Game::createImage(uint32_t width, uint32_t height, 
+void Game::createImage(uint32_t width, uint32_t height, uint32_t mipLvls,
     VkFormat format, VkImageTiling tiling, 
     VkImageUsageFlags usage, VkMemoryPropertyFlags properties, 
     VkImage& image, VkDeviceMemory& imageMemory)
@@ -1468,7 +1471,7 @@ void Game::createImage(uint32_t width, uint32_t height,
     imageInfo.extent.width   = static_cast<uint32_t>(width);
     imageInfo.extent.height  = static_cast<uint32_t>(height);
     imageInfo.extent.depth   = 1;
-    imageInfo.mipLevels      = 1;
+    imageInfo.mipLevels      = mipLvls;
     imageInfo.arrayLayers    = 1;
     imageInfo.format         = format; //!!use same format as used with the pixels
     imageInfo.tiling         = tiling; //use LINEAR if you want direct acces to the pixels
@@ -1503,7 +1506,7 @@ void Game::createImage(uint32_t width, uint32_t height,
 
 void Game::createTextureImageView()
 {
-    m_TextureImageView = createImageView(m_TextureDaeImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+    m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, m_MipLvl);
 }
 
 void Game::createTextureSampler()
@@ -1529,11 +1532,11 @@ void Game::createTextureSampler()
     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
     samplerInfo.unnormalizedCoordinates = VK_FALSE; //-> false returns 0-1| true returns 0-width, 0-height
     samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
+    samplerInfo.compareOp     = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias    = 0.0f;
+    samplerInfo.minLod        = static_cast<float>(m_MipLvl/2.f);
+    samplerInfo.maxLod        = static_cast<float>(m_MipLvl);
 
     if (vkCreateSampler(m_LogicalDevice, &samplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
     {
@@ -1545,18 +1548,20 @@ void Game::createTextureSampler()
 void Game::createDepthResources()
 {
     VkFormat depthFormat = findDepthFormat();
-    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, depthFormat,
+    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, depthFormat,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
-    m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
   
     //optional since its mostly handeld by render pass
     transitionImageLayout(m_DepthImage, depthFormat, 
-                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+                VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
 
 }
 
-void Game::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout)
+void Game::transitionImageLayout(VkImage image, VkFormat format, 
+                        VkImageLayout oldLayout, VkImageLayout newLayout,
+                            uint32_t mipLvls)
 {
     VkCommandBuffer commandbuffer = beginSingleCommands();
 
@@ -1578,7 +1583,7 @@ void Game::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout o
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
     barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.levelCount = mipLvls;
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
     barrier.srcAccessMask = 0;
@@ -1631,7 +1636,97 @@ void Game::transitionImageLayout(VkImage image, VkFormat format, VkImageLayout o
 
 }
 
-VkImageView Game::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags)
+void Game::generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels)
+{
+    VkCommandBuffer commandBuffer = beginSingleCommands();
+
+    //check if physical device supports linear filtering
+    VkFormatProperties formatProperties;
+    vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &formatProperties);
+    if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) 
+    {
+        throw std::runtime_error("texture image format does not support linear blitting!");
+    }
+    //--
+    
+    VkImageMemoryBarrier barrier{};
+    barrier.sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image                           = image;
+    barrier.srcQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex             = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount     = 1;
+    barrier.subresourceRange.levelCount     = 1;
+    
+    int32_t mipWidth  = texWidth;
+    int32_t mipHeight = texHeight;
+    for (uint32_t i{ 1 }; i < mipLevels; ++i)
+    {
+        barrier.subresourceRange.baseMipLevel = i - 1;
+        barrier.oldLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout     = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer,
+                  VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                  0, nullptr,
+                  0, nullptr,
+                  1, &barrier);
+
+        VkImageBlit blit{};
+        blit.srcOffsets[0] = { 0, 0, 0 };
+        blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = i - 1;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+        blit.dstOffsets[0] = { 0, 0, 0 };
+        blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = i;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = 1;
+
+        vkCmdBlitImage(commandBuffer,
+                        image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                        image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        1, &blit,
+                        VK_FILTER_LINEAR);
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        
+        vkCmdPipelineBarrier(commandBuffer,
+                        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                        0, nullptr,
+                        0, nullptr,
+                        1, &barrier);
+
+        if (mipWidth > 1) mipWidth /= 2;
+        if (mipHeight > 1) mipHeight /= 2;
+
+    }
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    
+    vkCmdPipelineBarrier(commandBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier);
+
+
+    endSingleCommands(commandBuffer);
+}
+
+VkImageView Game::createImageView(VkImage image, VkFormat format, 
+                                VkImageAspectFlags aspectFlags, uint32_t mipLvls)
 {
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType                   = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1640,7 +1735,7 @@ VkImageView Game::createImageView(VkImage image, VkFormat format, VkImageAspectF
     viewInfo.format                  = format;
     viewInfo.subresourceRange.aspectMask     = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel   = 0;
-    viewInfo.subresourceRange.levelCount     = 1;
+    viewInfo.subresourceRange.levelCount     = mipLvls;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount     = 1;
 
