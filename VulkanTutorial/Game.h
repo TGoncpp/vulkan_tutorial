@@ -94,14 +94,22 @@ private:
     std::vector<void*> m_vUniformBuffersMapped;
     VkDescriptorPool m_DescriptorPool;
     std::vector<VkDescriptorSet> m_vDescriptorSets;
+
     uint32_t m_MipLvl;
+    VkSampleCountFlagBits m_MsaaSamples = VK_SAMPLE_COUNT_1_BIT;
+
     VkImage m_TextureImage;
-    VkDeviceMemory m_TextureDaeImageMemory;
+    VkDeviceMemory m_TextureImageMemory;
     VkImageView m_TextureImageView;
     VkSampler m_TextureSampler;
+
     VkImage m_DepthImage;
     VkDeviceMemory m_DepthImageMemory;
     VkImageView m_DepthImageView;
+
+    VkImage m_ColorImage;
+    VkDeviceMemory m_ColorImageMemory;
+    VkImageView m_ColorImageView;
 
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
@@ -226,7 +234,7 @@ private:
 
     //TEXTURES
     void createTextureImage();
-    void createImage(uint32_t width, uint32_t height, uint32_t mipLvls,
+    void createImage(uint32_t width, uint32_t height, uint32_t mipLvls, VkSampleCountFlagBits numSamples,
                      VkFormat format, VkImageTiling tiling,
                      VkImageUsageFlags usage, VkMemoryPropertyFlags properties,
                      VkImage& image, VkDeviceMemory& imageMemory);
@@ -250,5 +258,6 @@ private:
     VkFormat findDepthFormat();
     bool hasStencilComponent(VkFormat format);
     void generateMipmaps(VkImage image, VkFormat format, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
+    VkSampleCountFlagBits getMaxUsableSampleCount();
 
 };

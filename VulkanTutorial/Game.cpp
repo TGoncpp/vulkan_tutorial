@@ -91,7 +91,7 @@ void Game::cleanup()
     vkDestroySampler(m_LogicalDevice, m_TextureSampler, nullptr);
     vkDestroyImageView(m_LogicalDevice, m_TextureImageView, nullptr);
     vkDestroyImage(m_LogicalDevice, m_TextureImage, nullptr);
-    vkFreeMemory(m_LogicalDevice, m_TextureDaeImageMemory, nullptr);
+    vkFreeMemory(m_LogicalDevice, m_TextureImageMemory, nullptr);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(m_LogicalDevice, m_vUniformBuffers[i], nullptr);
@@ -280,6 +280,7 @@ void Game::pickPhysicalDevice()
         if (isDeviceSuitable(physDev))
         {
             m_PhysicalDevice = physDev;
+            m_MsaaSamples    = getMaxUsableSampleCount();
             break;
         }
     }
@@ -1445,11 +1446,11 @@ void Game::createTextureImage()
     stbi_image_free(pixels);
 
     //create image to transfer to and bind
-    createImage(texWidth, textHeight, m_MipLvl,
+    createImage(texWidth, textHeight, m_MipLvl, VK_SAMPLE_COUNT_1_BIT,
         VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_TextureImage, m_TextureDaeImageMemory);
+        m_TextureImage, m_TextureImageMemory);
 
     transitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, m_MipLvl);
     copyBufferToImage(stagingBuffer, m_TextureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(textHeight));
@@ -1460,7 +1461,7 @@ void Game::createTextureImage()
     vkFreeMemory(m_LogicalDevice, stagingbufferMemory, nullptr);
 }
 
-void Game::createImage(uint32_t width, uint32_t height, uint32_t mipLvls,
+void Game::createImage(uint32_t width, uint32_t height, uint32_t mipLvls, VkSampleCountFlagBits numSamples,
     VkFormat format, VkImageTiling tiling, 
     VkImageUsageFlags usage, VkMemoryPropertyFlags properties, 
     VkImage& image, VkDeviceMemory& imageMemory)
@@ -1478,7 +1479,7 @@ void Game::createImage(uint32_t width, uint32_t height, uint32_t mipLvls,
     imageInfo.initialLayout  = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage          = usage;
     imageInfo.sharingMode    = VK_SHARING_MODE_EXCLUSIVE;
-    imageInfo.samples        = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples        = numSamples;
     imageInfo.flags          = 0;
 
     if (vkCreateImage(m_LogicalDevice, &imageInfo, nullptr, &image) != VK_SUCCESS)
@@ -1548,7 +1549,7 @@ void Game::createTextureSampler()
 void Game::createDepthResources()
 {
     VkFormat depthFormat = findDepthFormat();
-    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, depthFormat,
+    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
     m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
@@ -1836,4 +1837,21 @@ void Game::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uin
 
     endSingleCommands(commandBuffer);
 
+}
+
+VkSampleCountFlagBits Game::getMaxUsableSampleCount()
+{
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(m_PhysicalDevice, &physicalDeviceProperties);
+
+    VkSampleCountFlags counts = 
+        physicalDeviceProperties.limits.framebufferColorSampleCounts & physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+    if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+    if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+    if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+    if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+    if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+    if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+    
+    return VK_SAMPLE_COUNT_1_BIT;
 }
