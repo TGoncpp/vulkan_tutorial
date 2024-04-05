@@ -240,7 +240,8 @@ private:
                      VkImage& image, VkDeviceMemory& imageMemory);
     void createTextureImageView();
     void createTextureSampler();
-    void createDepthResources();
+    void createDepthResources();//for all depth resources
+    void createColorResources();// for all multisampling resources
 
     //MODELS
     void loadModel();

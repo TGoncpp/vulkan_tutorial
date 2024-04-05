@@ -59,6 +59,7 @@ void Game::initVulkan()
     createGraphicsPipeline();
 
     createCommandPool();
+    createColorResources();
     createDepthResources();
     createFramebuffer();
     createTextureImage();
@@ -87,6 +88,9 @@ void Game::mainLoop()
 
 void Game::cleanup()
 {
+    vkDestroyImageView(m_LogicalDevice, m_ColorImageView, nullptr);
+    vkDestroyImage(m_LogicalDevice, m_ColorImage, nullptr);
+    vkFreeMemory(m_LogicalDevice, m_ColorImageMemory, nullptr);
     cleanupSwapchain();
     vkDestroySampler(m_LogicalDevice, m_TextureSampler, nullptr);
     vkDestroyImageView(m_LogicalDevice, m_TextureImageView, nullptr);
@@ -366,6 +370,7 @@ void Game::createLogicalDevice()
 
     VkPhysicalDeviceFeatures deviceFeatures{}; //default for now, is for when using more cool vulkan stuff
     deviceFeatures.samplerAnisotropy = VK_TRUE;
+    deviceFeatures.sampleRateShading = VK_TRUE;
 
     VkDeviceCreateInfo deviceInfo{};
     deviceInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -560,6 +565,7 @@ void Game::recreateSwapchain()
 
     createSwapChain();
     createImageViews();
+    createColorResources();
     createDepthResources();
     createFramebuffer();
 }
@@ -694,9 +700,9 @@ void Game::createGraphicsPipeline()
     //MultiSampling
     VkPipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable   = VK_FALSE;
-    multisampling.rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT;
-    multisampling.minSampleShading      = 1.0f;     // Optional
+    multisampling.sampleShadingEnable   = VK_TRUE;
+    multisampling.rasterizationSamples  = m_MsaaSamples;
+    multisampling.minSampleShading      = 0.2f; //min fraction for sample shading; closer to one is smoother    
     multisampling.pSampleMask           = nullptr;  // Optional
     multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
     multisampling.alphaToOneEnable      = VK_FALSE; // Optional
@@ -805,10 +811,13 @@ VkShaderModule  Game::createShaderModule(const std::vector<char>& code)
 
 void Game::createRenderPass()
 {
+    //colorAttachement: is how color is multisampled (more samples per pxl) and calculated in memory but not presented
+    //colorAttachmentResolve: is how the previous get presented
+    
     //DISCRIPTIONS
     VkAttachmentDescription collorAttachment{};
     collorAttachment.format = m_SwapChainImageFormat;
-    collorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    collorAttachment.samples = m_MsaaSamples;
     //color and depth
     collorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //start with black background
     collorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -816,11 +825,23 @@ void Game::createRenderPass()
     collorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     collorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     collorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;    //layout at start off creting pass
-    collorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//How th renderpass should look like at the end
+    collorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;//How th renderpass should look like at the end
+    
+    VkAttachmentDescription collorAttachmentResolve{};//-> multisampling
+    collorAttachmentResolve.format = m_SwapChainImageFormat;
+    collorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    //color and depth
+    collorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    collorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    //stencil data
+    collorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    collorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    collorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;    //layout at start off creting pass
+    collorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//How th renderpass should look like at the end
     
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = findDepthFormat();
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.samples = m_MsaaSamples;
     //color and depth
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //start with black background
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -833,22 +854,28 @@ void Game::createRenderPass()
     //REFRENCES
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    colorAttachmentRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    
+    VkAttachmentReference colorAttachmentResolveRef{};
+    colorAttachmentResolveRef.attachment = 2;
+    colorAttachmentResolveRef.layout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference depthAttachmentRef{};
     depthAttachmentRef.attachment = 1;
-    depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    depthAttachmentRef.layout     = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
     //PASS IT
     VkSubpassDescription subPass{};
-    subPass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subPass.colorAttachmentCount = 1;
-    subPass.pColorAttachments = &colorAttachmentRef;
+    subPass.pipelineBindPoint       = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subPass.colorAttachmentCount    = 1;
+    subPass.pColorAttachments       = &colorAttachmentRef;
     subPass.pDepthStencilAttachment = &depthAttachmentRef;
+    subPass.pResolveAttachments     = &colorAttachmentResolveRef;
 
 
     //Creating the RENDERPASS
-    std::array<VkAttachmentDescription, 2> attachments = { collorAttachment, depthAttachment };
+    std::array<VkAttachmentDescription, 3> attachments = 
+    { collorAttachment, depthAttachment, collorAttachmentResolve };
     VkRenderPassCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     createInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -881,7 +908,8 @@ void Game::createFramebuffer()
     m_vSwapchainFramebuffers.resize(m_vSwapChainImageViews.size());
     for (size_t i{0}; i <  m_vSwapchainFramebuffers.size(); ++i)
     {
-        std::array<VkImageView,2> arrAttachments = { m_vSwapChainImageViews[i], m_DepthImageView };
+        std::array<VkImageView,3> arrAttachments = 
+        {  m_ColorImageView, m_DepthImageView ,m_vSwapChainImageViews[i]};
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType            = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -896,7 +924,6 @@ void Game::createFramebuffer()
         {
             throw std::runtime_error("creation off framebuffer %i failed"), i;
         }
-
     }
 }
 
@@ -1510,6 +1537,16 @@ void Game::createTextureImageView()
     m_TextureImageView = createImageView(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, m_MipLvl);
 }
 
+void Game::createColorResources()
+{
+    VkFormat colorFormat = m_SwapChainImageFormat;
+    
+    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, m_MsaaSamples, colorFormat, 
+        VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, 
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_ColorImage, m_ColorImageMemory);
+    m_ColorImageView = createImageView(m_ColorImage, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+}
+
 void Game::createTextureSampler()
 {
     VkSamplerCreateInfo samplerInfo{};
@@ -1536,7 +1573,7 @@ void Game::createTextureSampler()
     samplerInfo.compareOp     = VK_COMPARE_OP_ALWAYS;
     samplerInfo.mipmapMode    = VK_SAMPLER_MIPMAP_MODE_LINEAR;
     samplerInfo.mipLodBias    = 0.0f;
-    samplerInfo.minLod        = static_cast<float>(m_MipLvl/2.f);
+    samplerInfo.minLod        = static_cast<float>(m_MipLvl/4.f);
     samplerInfo.maxLod        = static_cast<float>(m_MipLvl);
 
     if (vkCreateSampler(m_LogicalDevice, &samplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS)
@@ -1549,7 +1586,7 @@ void Game::createTextureSampler()
 void Game::createDepthResources()
 {
     VkFormat depthFormat = findDepthFormat();
-    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat,
+    createImage(m_SwapChainExtent.width, m_SwapChainExtent.height, 1, m_MsaaSamples, depthFormat,
         VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
     m_DepthImageView = createImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
