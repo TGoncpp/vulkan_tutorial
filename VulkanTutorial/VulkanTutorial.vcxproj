@@ -137,11 +137,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="computeShader.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Pipeline.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera.h" />
+    <ClInclude Include="computeShader.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Pipeline.h" />
     <ClInclude Include="Semaphore.h" />
     <ClInclude Include="Structs.h" />
   </ItemGroup>
@@ -150,6 +155,7 @@
     <Image Include="textures\viking_room.png" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="particle.vert" />
     <None Include="shader\compile.bat" />
     <None Include="shader\frag.spv" />
     <None Include="shader\shader.frag" />

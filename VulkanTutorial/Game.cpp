@@ -2,8 +2,10 @@
 #include <set>
 #include<algorithm>     // for clamp
 #include <limits>       //for numeric_limits
+#include <chrono>
+
 //#include <cstdint>      // for uint32_t
-#define STB_IMAGE_IMPLEMENTATION // somehow gives LINK errors instead off solving them
+#define STB_IMAGE_IMPLEMENTATION 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE //turns the default value range from -1->1 to 0->1
 #include <stb_image.h>
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,8 +14,9 @@
 #include <tiny_obj_loader.h> //obj parser
 #include <unordered_map>
 
-#include <fstream>
-#include <filesystem>
+//#include <fstream>
+//#include <filesystem>
+
 
 void Game::run()
 {
@@ -56,7 +59,11 @@ void Game::initVulkan()
     createImageViews();
     createRenderPass();
     createDescriptorSetLayout();
-    createGraphicsPipeline();
+    //createGraphicsPipeline();
+    m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv");
+    m_p3DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
+
+    m_pCamera = std::make_unique< Camera>(glm::vec3{ 2.0f, 2.0f, 2.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
 
     createCommandPool();
     createColorResources();
@@ -107,8 +114,9 @@ void Game::cleanup()
     vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
     vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
     vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
-    vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
+    m_p3DPipeline->Destroy(m_LogicalDevice);
+    //vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
+    //vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
     vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
     for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
@@ -598,217 +606,6 @@ void Game::createImageViews()
     }
 }
 
-void Game::createGraphicsPipeline()
-{
-    auto vertShader = readFile("shader/vert.spv");
-    auto fragShader = readFile("shader/frag.spv");
-
-    //create module to help transfer code to pipeline
-    VkShaderModule vertShaderModule =  createShaderModule(vertShader);
-    VkShaderModule fragShaderModule =  createShaderModule(fragShader);
-    
-    //PIPELINE INFO
-    //Vertex Shader
-    VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-    vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    //insert the shader code and the function name that calls it
-    vertShaderStageInfo.module = vertShaderModule;
-    vertShaderStageInfo.pName  = "main";
-    vertShaderStageInfo.pSpecializationInfo = nullptr; // this can specify a constant for in your shader (nullpntr = default)
-
-    //Fragment Shader
-    VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-    fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragShaderStageInfo.module = fragShaderModule;
-    fragShaderStageInfo.pName = "main";
-
-    //array of shaderStagesInfo
-    VkPipelineShaderStageCreateInfo vShaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-    //Dynamic state
-    std::vector<VkDynamicState> vDynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    VkPipelineDynamicStateCreateInfo dynamicInfo{};
-    dynamicInfo.sType                    = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo.dynamicStateCount        = static_cast<uint32_t>(vDynamicStates.size());
-    dynamicInfo.pDynamicStates           = vDynamicStates.data();
-
-    //vertex format info 
-    auto bindingDescription            = Vertex::getBindDescription();
-    auto attributeDescription          = Vertex::getAttributeDescriptions();
-
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-    vertexInputInfo.sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.vertexBindingDescriptionCount   = 1;
-    vertexInputInfo.pVertexBindingDescriptions      = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescription.size());
-    vertexInputInfo.pVertexAttributeDescriptions    = attributeDescription.data();
-
-    //Input Assembly
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-    inputAssemblyInfo.sType                         = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyInfo.topology                      = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-    inputAssemblyInfo.primitiveRestartEnable        = VK_FALSE;
-
-    //viewport
-    VkViewport viewPort{};
-    viewPort.x            = 0.0f;
-    viewPort.y            = 0.0f;
-    viewPort.width        = static_cast<float>(m_SwapChainExtent.width);
-    viewPort.height       = static_cast<float>(m_SwapChainExtent.height);
-    viewPort.minDepth     = 0.0f;
-    viewPort.maxDepth     = 1.0f;
-
-    //Apply siccor Rect -> made same size as viewport to have full view off image
-    VkRect2D scissor{};
-    scissor.offset = { 0, 0 };
-    scissor.extent = m_SwapChainExtent;
-
-    //setting a nonDynamic viewportState ->look at tutorial for dynamic setting
-    VkPipelineViewportStateCreateInfo viewportState{};
-    viewportState.sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportState.viewportCount = 1;
-    viewportState.pViewports    = &viewPort;
-    viewportState.scissorCount  = 1;
-    viewportState.pScissors     = &scissor;
-
-    //Depth
-    VkPipelineDepthStencilStateCreateInfo depthStencil{};
-    depthStencil.sType             = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.depthTestEnable   = VK_TRUE;
-    depthStencil.depthWriteEnable  = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_FALSE;
-
-
-    //Rastereization info
-    VkPipelineRasterizationStateCreateInfo rasterizer{};
-    rasterizer.sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterizer.depthClampEnable        = VK_FALSE; //if true : clamps values to the far/near planes when close to
-    rasterizer.rasterizerDiscardEnable = VK_FALSE; //dissables output to frameBuffer
-    rasterizer.polygonMode             = VK_POLYGON_MODE_FILL;
-    rasterizer.lineWidth               = 1.0f;
-    rasterizer.cullMode                = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-    rasterizer.depthBiasEnable         = VK_FALSE;
-    rasterizer.depthBiasConstantFactor = 0.0f;//optional when disabled
-    rasterizer.depthBiasClamp          = 0.0f;//optional when disabled
-    rasterizer.depthBiasSlopeFactor    = 0.0f;//optional when disabled
-
-    //MultiSampling
-    VkPipelineMultisampleStateCreateInfo multisampling{};
-    multisampling.sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampling.sampleShadingEnable   = VK_TRUE;
-    multisampling.rasterizationSamples  = m_MsaaSamples;
-    multisampling.minSampleShading      = 0.2f; //min fraction for sample shading; closer to one is smoother    
-    multisampling.pSampleMask           = nullptr;  // Optional
-    multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
-    multisampling.alphaToOneEnable      = VK_FALSE; // Optional
-
-    //Configuration off attachted framebuffer
-    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-    colorBlendAttachment.colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    colorBlendAttachment.blendEnable         = VK_FALSE;
-    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    colorBlendAttachment.colorBlendOp        = VK_BLEND_OP_ADD;      // Optional
-    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional
-    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-    colorBlendAttachment.alphaBlendOp        = VK_BLEND_OP_ADD;      // Optional
-
-    //Color blending
-    VkPipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.sType               = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlending.logicOpEnable       = VK_FALSE;
-    colorBlending.logicOp             = VK_LOGIC_OP_COPY; // Optional
-    colorBlending.attachmentCount     = 1;
-    colorBlending.pAttachments        = &colorBlendAttachment;
-    colorBlending.blendConstants[0]   = 0.0f; // Optional
-    colorBlending.blendConstants[1]   = 0.0f; // Optional
-    colorBlending.blendConstants[2]   = 0.0f; // Optional
-    colorBlending.blendConstants[3]   = 0.0f; // Optional
-
-    //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
-    VkPipelineLayoutCreateInfo pipelineLayout{};
-    pipelineLayout.sType                   = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayout.setLayoutCount          = 1;
-    pipelineLayout.pSetLayouts             = &m_DescriptorSetLayout;
-    pipelineLayout.pushConstantRangeCount  = 0;//optional
-    pipelineLayout.pPushConstantRanges     = nullptr;//optional
-
-    if (vkCreatePipelineLayout(m_LogicalDevice, &pipelineLayout, nullptr, &m_PipelineLayout) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to create pipeline layout");
-    }
-
-    VkGraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-
-    //Shader stages
-    pipelineInfo.stageCount            = 2;
-    pipelineInfo.pStages               = vShaderStages;
-    //Fixed Function stage
-    pipelineInfo.pVertexInputState     = &vertexInputInfo;
-    pipelineInfo.pInputAssemblyState   = &inputAssemblyInfo;
-    pipelineInfo.pViewportState        = &viewportState;
-    pipelineInfo.pRasterizationState   = &rasterizer;
-    pipelineInfo.pMultisampleState     = &multisampling;
-    pipelineInfo.pDepthStencilState    = &depthStencil;//must be specified if the renderpass contains it
-    pipelineInfo.pColorBlendState      = &colorBlending;
-    pipelineInfo.pDynamicState         = &dynamicInfo;
-    //layout
-    pipelineInfo.layout                = m_PipelineLayout;
-    //Render pass
-    pipelineInfo.renderPass            = m_RenderPass;
-    pipelineInfo.subpass               = 0; //index
-    pipelineInfo.basePipelineHandle    = VK_NULL_HANDLE; //optional
-    pipelineInfo.basePipelineIndex     = -1; //optional
-
-    if (vkCreateGraphicsPipelines(m_LogicalDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_GraphicsPipeline) != VK_SUCCESS)
-    {
-        throw std::runtime_error("creation off grapics pipeline failed");
-    }
-
-    //destroying of shader after creation off pipline
-    vkDestroyShaderModule(m_LogicalDevice, fragShaderModule, nullptr);
-    vkDestroyShaderModule(m_LogicalDevice, vertShaderModule, nullptr);
-
-}
-
-std::vector<char> Game::readFile(const std::string& filename)
-{
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    if (!file.is_open())
-        throw std::runtime_error("failed to open shader file");
-    size_t fileSize{ static_cast<size_t>(file.tellg()) };
-    std::vector<char> vBuffer(fileSize);
-
-    file.seekg(0);
-    file.read(vBuffer.data(), fileSize);
-
-    file.close();
-    
-    return vBuffer;
-}
-
-VkShaderModule  Game::createShaderModule(const std::vector<char>& code)
-{
-    VkShaderModuleCreateInfo createInfo{};
-    createInfo.sType      = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize   = code.size();
-    createInfo.pCode      = reinterpret_cast<const uint32_t*>(code.data());
-
-    VkShaderModule shaderModule;
-    if (vkCreateShaderModule(m_LogicalDevice, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shader module!");
-    }
-
-    //stored localy because after the creation off the pipeline we dont need this value anymore
-    return shaderModule;
-}
-
 void Game::createRenderPass()
 {
     //colorAttachement: is how color is multisampled (more samples per pxl) and calculated in memory but not presented
@@ -947,9 +744,9 @@ void Game::createCommandBuffers()
     m_vCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkCommandBufferAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = m_CommandPool;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool        = m_CommandPool;
+    allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = static_cast<uint32_t>(m_vCommandBuffers.size());
 
     if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, m_vCommandBuffers.data()) != VK_SUCCESS)
@@ -959,7 +756,7 @@ void Game::createCommandBuffers()
 
 }
 
-void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline pipeline)
 {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -988,8 +785,6 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
-
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1004,11 +799,8 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     scissor.offset = { 0,0 };
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    ////DRAW some STUFFFF......
-    //vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-    
     //Binding off vertexbuffer
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+    pipeline.Record(commandBuffer);
 
     VkBuffer vertexBuffers[] = { m_VertexBuffer };
     VkDeviceSize offsets[] = { 0 };
@@ -1018,7 +810,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     //bind descriptors to the current frame
     vkCmdBindDescriptorSets(commandBuffer,
                              VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             m_PipelineLayout,
+                             pipeline.GetPipelineLayout(),
                              0, 1, &m_vDescriptorSets[m_CurrentFrame],
                              0, nullptr);
 
@@ -1057,7 +849,7 @@ void Game::drawFrame()
 
     //3.Recording the command buffer
     vkResetCommandBuffer(m_vCommandBuffers[m_CurrentFrame], 0);
-    recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex);
+    recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex, *m_p3DPipeline);
 
     //3.5 Upadate transformation on image
     updateUniformBuffer(m_CurrentFrame); //-> update the descriptor
@@ -1101,7 +893,6 @@ void Game::drawFrame()
     {
         m_FramebufferResiezed = false;
         recreateSwapchain();
-        //return;
     }
     else if (result != VK_SUCCESS)
         throw std::runtime_error("failed to present swapchain image during drawframe");
@@ -1224,9 +1015,8 @@ void Game::createUniformBuffers()
             m_vUniformBuffers[i], m_vUniformBuffersMemory[i]);
         vkMapMemory(m_LogicalDevice, m_vUniformBuffersMemory[i], 0, bufferSize, 0, &m_vUniformBuffersMapped[i]);
         //Will be mapped until end off aplication -> called: Persistent Mapping
-        //Maps only at creation instead off every frame
+        //Maps only at creation instead off every frame so you can use the given pointer to update it in draw
     }
-
 
 }
 
@@ -1391,8 +1181,8 @@ void Game::updateUniformBuffer(uint32_t currentImage)
 
     UniformBufferObject ubo{};
     ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view  = glm::lookAt(m_CameraPos, m_WorldCenter, glm::vec3(0.0f, 0.0f, 1.0f));// up vector
-    ubo.proj  = glm::perspective(m_FieldOfView, m_SwapChainExtent.width / (float)m_SwapChainExtent.height, m_NearPlane, m_FarPlane);
+    ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    ubo.proj  = glm::perspective(m_pCamera->GetfieldOfView(), m_pCamera->GetAspectRatio(), m_pCamera->GetNearPlane(), m_pCamera->GetFarPlane());
 
     ubo.proj[1][1] *= -1; // flip the y-axis. now it wil be from bottom(0) to top(1)
 

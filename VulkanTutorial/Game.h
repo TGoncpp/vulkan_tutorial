@@ -5,8 +5,6 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include <chrono>
-
 #include <memory> //used for RAI manegment
 
 #include <iostream>
@@ -17,6 +15,11 @@
 #include <string>
 
 #include "Structs.h"
+
+//Abstract classes
+#include "camera.h"
+#include "Pipeline.h"
+
 
 //enable validationLayers while on debug mode
 const std::vector<const char*> vValidationLayers = { "VK_LAYER_KHRONOS_validation" };
@@ -73,8 +76,8 @@ private:
     std::vector<VkImageView> m_vSwapChainImageViews;
     VkRenderPass m_RenderPass;
     VkDescriptorSetLayout m_DescriptorSetLayout;
-    VkPipelineLayout m_PipelineLayout;
-    VkPipeline m_GraphicsPipeline;
+    //VkPipelineLayout m_PipelineLayout;
+    //VkPipeline m_GraphicsPipeline;
     std::vector<VkFramebuffer> m_vSwapchainFramebuffers;
     VkCommandPool m_CommandPool;
     std::vector<VkCommandBuffer> m_vCommandBuffers;
@@ -111,16 +114,14 @@ private:
     VkDeviceMemory m_ColorImageMemory;
     VkImageView m_ColorImageView;
 
+    std::unique_ptr<Camera> m_pCamera;
+    std::unique_ptr<Pipeline> m_p3DPipeline;
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
     uint32_t m_CurrentFrame        = 0;
 
-    glm::vec3 m_CameraPos{ 2.0f, 2.0f, 2.0f };
-    glm::vec3 m_WorldCenter{ 0.0f, 0.0f, 0.0f };
-    float m_FieldOfView{ glm::radians(45.f) };
-    float m_NearPlane{ 0.1f };
-    float m_FarPlane{ 10.0f };
+
     float m_RotationSpeed{ 0.f };
 
     //model
@@ -189,14 +190,14 @@ private:
     //IMAGE VIEW
     void createImageViews();
 
-    //PIPELINE
-    //-------------------------------
-    void createGraphicsPipeline();
-    //load the shader
-    static std::vector<char> readFile(const std::string& filename);
-    //helperModule to pass the filecode to pipeline
-    VkShaderModule  createShaderModule(const std::vector<char>& code);
-    //RENDER PASS
+   // //PIPELINE
+   // //-------------------------------
+   // void createGraphicsPipeline();
+   // //load the shader
+   // static std::vector<char> readFile(const std::string& filename);
+   // //helperModule to pass the filecode to pipeline
+   // VkShaderModule  createShaderModule(const std::vector<char>& code);
+   // //RENDER PASS
     void createRenderPass();
 
     //DRAWING
@@ -204,7 +205,7 @@ private:
     void createFramebuffer();
     void createCommandPool();
     void createCommandBuffers();
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline pipeline);
     void drawFrame();
 
     //SEMAPHORE AND FENCE
@@ -218,6 +219,7 @@ private:
     void createDescriptorPool();
     void createDescriptorSets();
 
+    public:
     //Abstraction
     void createBuffer(VkDeviceSize bufferSize, 
         VkBufferUsageFlags flags,
@@ -225,6 +227,7 @@ private:
         VkBuffer& vertexBuffer, VkDeviceMemory& vertexBufferMemory);
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
 
+    private:
     //Descripters
     void createDescriptorSetLayout();
 
