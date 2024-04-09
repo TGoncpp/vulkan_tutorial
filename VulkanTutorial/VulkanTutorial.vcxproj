@@ -137,18 +137,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="computeShader.cpp" />
     <ClCompile Include="Game.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Object.cpp" />
     <ClCompile Include="Pipeline.cpp" />
+    <ClCompile Include="Time.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="computeShader.h" />
     <ClInclude Include="Game.h" />
+    <ClInclude Include="Object.h" />
     <ClInclude Include="Pipeline.h" />
     <ClInclude Include="Semaphore.h" />
     <ClInclude Include="Structs.h" />
+    <ClInclude Include="Time.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\dae.jpg" />

@@ -2,7 +2,7 @@
 #include <set>
 #include<algorithm>     // for clamp
 #include <limits>       //for numeric_limits
-#include <chrono>
+#include "Time.h"
 
 //#include <cstdint>      // for uint32_t
 #define STB_IMAGE_IMPLEMENTATION 
@@ -10,9 +10,6 @@
 #include <stb_image.h>
 #include <glm/gtc/matrix_transform.hpp>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h> //obj parser
-#include <unordered_map>
 
 //#include <fstream>
 //#include <filesystem>
@@ -39,6 +36,22 @@ void Game::initWindow()
     //set user pointer off aplication in window
     glfwSetWindowUserPointer(m_Window, this);
     glfwSetFramebufferSizeCallback(m_Window, framebufferResizeCallBack);
+
+    glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+        void* pUser = glfwGetWindowUserPointer(window);
+        Camera* vBase = static_cast<Camera*>(pUser);
+        vBase->keyEvent(key, scancode, action, mods);
+        });
+    glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xpos, double ypos) {
+        void* pUser = glfwGetWindowUserPointer(window);
+        Camera* vBase = static_cast<Camera*>(pUser);
+        vBase->mouseMove(window, xpos, ypos);
+        });
+    glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods) {
+        void* pUser = glfwGetWindowUserPointer(window);
+        Camera* vBase = static_cast<Camera*>(pUser);
+        vBase->mouseEvent(window, button, action, mods);
+        });
 }
 
 void Game::framebufferResizeCallBack(GLFWwindow* window, int width, int height)
@@ -59,12 +72,10 @@ void Game::initVulkan()
     createImageViews();
     createRenderPass();
     createDescriptorSetLayout();
-    //createGraphicsPipeline();
     m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv");
     m_p3DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
-    m_pCamera = std::make_unique< Camera>(glm::vec3{ 2.0f, 2.0f, 2.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
-
+    m_pCamera = std::make_unique< Camera>(glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
     createCommandPool();
     createColorResources();
     createDepthResources();
@@ -72,14 +83,15 @@ void Game::initVulkan()
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
-    loadModel();
-    createVertexBuffer();
-    createIndexBuffer();
+    createCommandBuffers();
+    m_p3DObject = std::make_unique< SceneObject>("models/bunny.obj", "", false);
+    m_p3DObject2 = std::make_unique< SceneObject>("models/room.obj", "textures/viking_room.png", true);
+    m_p3DObject->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
+    m_p3DObject2->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
+    
     createUniformBuffers();
     createDescriptorPool();
     createDescriptorSets();
-
-    createCommandBuffers();
     createSyncObjects();
 }
 
@@ -110,21 +122,19 @@ void Game::cleanup()
     }
     vkDestroyDescriptorPool(m_LogicalDevice, m_DescriptorPool, nullptr);
     vkDestroyDescriptorSetLayout(m_LogicalDevice, m_DescriptorSetLayout, nullptr);
-    vkDestroyBuffer(m_LogicalDevice, m_IndexBuffer, nullptr);
-    vkFreeMemory(m_LogicalDevice, m_IndexBufferMemory, nullptr);
-    vkDestroyBuffer(m_LogicalDevice, m_VertexBuffer, nullptr);
-    vkFreeMemory(m_LogicalDevice, m_VertexBufferMemory, nullptr);
+    
+    m_p3DObject->Destroy(m_LogicalDevice);
+    m_p3DObject2->Destroy(m_LogicalDevice);
     m_p3DPipeline->Destroy(m_LogicalDevice);
-    //vkDestroyPipeline(m_LogicalDevice, m_GraphicsPipeline, nullptr);
-    //vkDestroyPipelineLayout(m_LogicalDevice, m_PipelineLayout, nullptr);
-    vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
+
     for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
         vkDestroySemaphore(m_LogicalDevice, m_vImageAvailableSemaphores[i], nullptr);
         vkDestroySemaphore(m_LogicalDevice, m_vRenderFinishedAvailableSemaphores[i], nullptr);
         vkDestroyFence(m_LogicalDevice, m_vInFlightFences[i], nullptr);
     }
-
+   
+    vkDestroyRenderPass(m_LogicalDevice, m_RenderPass, nullptr);
     vkDestroyCommandPool(m_LogicalDevice, m_CommandPool, nullptr);
     vkDestroyDevice(m_LogicalDevice, nullptr);
     if (enableValidationLayers)
@@ -802,11 +812,6 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     //Binding off vertexbuffer
     pipeline.Record(commandBuffer);
 
-    VkBuffer vertexBuffers[] = { m_VertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
     //bind descriptors to the current frame
     vkCmdBindDescriptorSets(commandBuffer,
                              VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -814,9 +819,26 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
                              0, 1, &m_vDescriptorSets[m_CurrentFrame],
                              0, nullptr);
 
+   
+    //Room
+    glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.f, 0.f, 0.f));
+    transform = glm::rotate(transform, Time::GetElapesedSec() * glm::radians(-m_RotationSpeed), glm::vec3(0.f, 0, 1.0f));
+    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p3DObject2->Record(commandBuffer);
 
-    //vkCmdDraw(commandBuffer, static_cast<uint32_t>(m_vVertices.size()), 1, 0, 0);   -> When not using an index buffer
-    vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(m_vIndices.size()), 1, 0, 0, 0);
+    //Rabit 1
+    transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
+    transform = glm::scale(transform, glm::vec3(0.2f));
+    transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
+    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p3DObject->Record(commandBuffer);
+
+    //rabit2
+    transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
+    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p3DObject->Record(commandBuffer);
+
+
 
     vkCmdEndRenderPass(commandBuffer);
 
@@ -824,8 +846,6 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     {
         throw std::runtime_error("failed to record command buffer");
     }
-
-
 }
 
 void Game::drawFrame()
@@ -850,31 +870,32 @@ void Game::drawFrame()
     //3.Recording the command buffer
     vkResetCommandBuffer(m_vCommandBuffers[m_CurrentFrame], 0);
     recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex, *m_p3DPipeline);
+   
 
     //3.5 Upadate transformation on image
     updateUniformBuffer(m_CurrentFrame); //-> update the descriptor
 
-    //4. Submitting the command buffer
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
-    VkSemaphore waitSemaphores[]      = { m_vImageAvailableSemaphores[m_CurrentFrame] };
-    VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount     = 1;
-    submitInfo.pWaitSemaphores        = waitSemaphores;
-    submitInfo.pWaitDstStageMask      = waitstages;
-
-    submitInfo.commandBufferCount   = 1;
-    submitInfo.pCommandBuffers      = &m_vCommandBuffers[m_CurrentFrame];
-
-    VkSemaphore signalSemaphore[]   = { m_vRenderFinishedAvailableSemaphores[m_CurrentFrame] };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores    = signalSemaphore;
-
-    if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_vInFlightFences[m_CurrentFrame]) != VK_SUCCESS)
-    {
-        throw std::runtime_error("failed to submit the command buffer");
-    }
+   //4. Submitting the command buffer
+   VkSubmitInfo submitInfo{};
+   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+   
+   VkSemaphore waitSemaphores[]      = { m_vImageAvailableSemaphores[m_CurrentFrame] };
+   VkPipelineStageFlags waitstages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+   submitInfo.waitSemaphoreCount     = 1;
+   submitInfo.pWaitSemaphores        = waitSemaphores;
+   submitInfo.pWaitDstStageMask      = waitstages;
+   
+   submitInfo.commandBufferCount   = 1;
+   submitInfo.pCommandBuffers      = &m_vCommandBuffers[m_CurrentFrame];
+   
+   VkSemaphore signalSemaphore[]   = { m_vRenderFinishedAvailableSemaphores[m_CurrentFrame] };
+   submitInfo.signalSemaphoreCount = 1;
+   submitInfo.pSignalSemaphores    = signalSemaphore;
+   
+   if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, m_vInFlightFences[m_CurrentFrame]) != VK_SUCCESS)
+   {
+       throw std::runtime_error("failed to submit the command buffer");
+   }
 
     //5.Present
     VkPresentInfoKHR presentInfo{};
@@ -924,37 +945,7 @@ void Game::createSyncObjects()
     }
 }
 
-void Game::createVertexBuffer()
-{
-    VkDeviceSize bufferSize = sizeof(m_vVertices[0]) * m_vVertices.size();
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
 
-    createBuffer(bufferSize, 
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer, stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(m_LogicalDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, m_vVertices.data(), static_cast<size_t>(bufferSize));
-    vkUnmapMemory(m_LogicalDevice, stagingBufferMemory);
-
-    //Binding the vertex buffer will happen in the recordCommandBuffer()
-
-    createBuffer(bufferSize, 
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        m_VertexBuffer, m_VertexBufferMemory);
-
-    copyBuffer(stagingBuffer, m_VertexBuffer, bufferSize);
-
-    //Clean up temp buffer/ bufferMemory
-    vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
-    vkFreeMemory(m_LogicalDevice, stagingBufferMemory, nullptr);
-
-
-}
 
 uint32_t Game::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {
@@ -972,32 +963,6 @@ uint32_t Game::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags propert
     throw std::runtime_error("failed to find suitable memory type");
 }
 
-void Game::createIndexBuffer()
-{
-    VkDeviceSize bufferSize = sizeof(m_vIndices[0]) * m_vIndices.size();
-    VkBuffer stagingBuffer;
-    VkDeviceMemory staginBufferMemory;
-    createBuffer(bufferSize, 
-                VK_BUFFER_USAGE_TRANSFER_SRC_BIT, 
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, 
-                stagingBuffer, staginBufferMemory);
-
-    void* data;
-    vkMapMemory(m_LogicalDevice, staginBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, m_vIndices.data(), static_cast<size_t>(bufferSize));
-    vkUnmapMemory(m_LogicalDevice, staginBufferMemory);
-
-    createBuffer(bufferSize,
-                VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                m_IndexBuffer, m_IndexBufferMemory);
-
-    copyBuffer(stagingBuffer, m_IndexBuffer, bufferSize);
-
-    vkDestroyBuffer(m_LogicalDevice, stagingBuffer, nullptr);
-    vkFreeMemory(m_LogicalDevice, staginBufferMemory, nullptr);
-
-}
 
 void Game::createUniformBuffers()
 {
@@ -1175,13 +1140,10 @@ void Game::createDescriptorSetLayout()
 
 void Game::updateUniformBuffer(uint32_t currentImage)
 {
-    static auto start = std::chrono::high_resolution_clock::now();
-    auto currentTime  = std::chrono::high_resolution_clock::now();
-    float time        = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - start).count();
-
     UniformBufferObject ubo{};
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    //ubo.model = glm::rotate(glm::mat4(1.0f), /*Time::GetElapesedSec() **/ glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
+    ubo.model = glm::translate(glm::mat4(1.0f), m_pCamera->GetPosition());
+    ubo.view  = glm::lookAt(glm::vec3{ 2.0f, 2.0f, 2.0f }, m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
     ubo.proj  = glm::perspective(m_pCamera->GetfieldOfView(), m_pCamera->GetAspectRatio(), m_pCamera->GetNearPlane(), m_pCamera->GetFarPlane());
 
     ubo.proj[1][1] *= -1; // flip the y-axis. now it wil be from bottom(0) to top(1)
@@ -1189,48 +1151,6 @@ void Game::updateUniformBuffer(uint32_t currentImage)
     //Copy the data in to the current Uniform buffer object
     memcpy(m_vUniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 
-}
-
-void Game::loadModel()
-{
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warningMessage, errorMessege;
-
-    if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warningMessage, &errorMessege, m_ModelPath.c_str()))
-    {
-        throw std::runtime_error{ "failed to load in obj" + warningMessage + errorMessege};
-    }
-
-    std::unordered_map<Vertex, uint32_t> mUniqueVertexes{};
-    for (const auto& shape : shapes)
-    {
-        for (const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex{};
-
-            vertex.pos = {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-            vertex.texcoord = {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-               1.0f - attrib.texcoords[2 * index.texcoord_index + 1] //1.0- is because we flip the y-axis in our settings
-            };
-            vertex.color = { 1.0f, 1.0f, 1.0f };
-
-            if (mUniqueVertexes.count(vertex) == 0)
-            {
-                mUniqueVertexes[vertex] = static_cast<uint32_t>(m_vVertices.size());
-                m_vVertices.push_back(vertex);
-            }
-
-            
-            m_vIndices.push_back(mUniqueVertexes[vertex]);
-        }
-    }
 }
 
 void Game::createTextureImage()
@@ -1573,7 +1493,6 @@ VkImageView Game::createImageView(VkImage image, VkFormat format,
     {
         throw std::runtime_error("failed to create texture image view!");
     }
-
 
     return imageView;
 }

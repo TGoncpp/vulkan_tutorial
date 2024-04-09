@@ -1,6 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
+struct GLFWwindow;
 
 class Camera
 {
@@ -19,7 +20,12 @@ public:
     float GetAspectRatio()const { return m_AspecRatio; };
     float GetfieldOfView()const { return m_FieldOfView; };
     
-    void MoveCamera(const glm::vec3& offset) { m_CameraPos += offset; };
+    void MoveCamera(const glm::vec3& offset) ;
+    void keyEvent(int key, int scancode, int action, int mods);
+    void mouseMove(GLFWwindow* window, double xpos, double ypos);
+    void mouseEvent(GLFWwindow* window, int button, int action, int mods);
+
+
 
 private:
     glm::vec3 m_CameraPos{ 2.0f, 2.0f, 2.0f };
@@ -28,4 +34,8 @@ private:
     float m_AspecRatio{ 1.f };
     float m_NearPlane{ 0.1f };
     float m_FarPlane{ 10.0f };
+
+    glm::vec3 m_DragStart{};
+    float m_Radius{ 3.0f };
+    float m_Rotation{ 0.f };
 };

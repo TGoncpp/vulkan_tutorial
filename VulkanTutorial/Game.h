@@ -4,7 +4,6 @@
 //GLFW is interface for window Handle
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
 #include <memory> //used for RAI manegment
 
 #include <iostream>
@@ -19,6 +18,7 @@
 //Abstract classes
 #include "camera.h"
 #include "Pipeline.h"
+#include "Object.h"
 
 
 //enable validationLayers while on debug mode
@@ -76,22 +76,21 @@ private:
     std::vector<VkImageView> m_vSwapChainImageViews;
     VkRenderPass m_RenderPass;
     VkDescriptorSetLayout m_DescriptorSetLayout;
-    //VkPipelineLayout m_PipelineLayout;
-    //VkPipeline m_GraphicsPipeline;
+   
     std::vector<VkFramebuffer> m_vSwapchainFramebuffers;
-    VkCommandPool m_CommandPool;
-    std::vector<VkCommandBuffer> m_vCommandBuffers;
+
+
+   VkCommandPool m_CommandPool;
+  
+    //const std::string m_ModelPath{ "models/room.obj" };
+    const std::string m_TexturePath{ "textures/viking_room.png" };
+
 
     std::vector < VkSemaphore> m_vImageAvailableSemaphores;
     std::vector < VkSemaphore> m_vRenderFinishedAvailableSemaphores;
     std::vector < VkFence> m_vInFlightFences;
 
-    std::vector<Vertex> m_vVertices;
-    std::vector<uint32_t> m_vIndices;//use uint32_t when amount get above 65535
-    VkBuffer m_VertexBuffer;
-    VkDeviceMemory m_VertexBufferMemory;
-    VkBuffer m_IndexBuffer;
-    VkDeviceMemory m_IndexBufferMemory;
+    std::vector<VkCommandBuffer> m_vCommandBuffers;
     std::vector<VkBuffer> m_vUniformBuffers;
     std::vector<VkDeviceMemory> m_vUniformBuffersMemory;
     std::vector<void*> m_vUniformBuffersMapped;
@@ -116,17 +115,17 @@ private:
 
     std::unique_ptr<Camera> m_pCamera;
     std::unique_ptr<Pipeline> m_p3DPipeline;
+    std::unique_ptr<SceneObject> m_p3DObject;
+    std::unique_ptr<SceneObject> m_p3DObject2;
+
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
     const int MAX_FRAMES_IN_FLIGHT = 2;
     uint32_t m_CurrentFrame        = 0;
 
 
-    float m_RotationSpeed{ 0.f };
+    float m_RotationSpeed{ 50.f };
 
-    //model
-    const std::string m_ModelPath{ "models/room.obj" };
-    const std::string m_TexturePath{ "textures/viking_room.png" };
 
     //-----------------------------------------------------------
     //Main functions
@@ -190,13 +189,6 @@ private:
     //IMAGE VIEW
     void createImageViews();
 
-   // //PIPELINE
-   // //-------------------------------
-   // void createGraphicsPipeline();
-   // //load the shader
-   // static std::vector<char> readFile(const std::string& filename);
-   // //helperModule to pass the filecode to pipeline
-   // VkShaderModule  createShaderModule(const std::vector<char>& code);
    // //RENDER PASS
     void createRenderPass();
 
@@ -212,9 +204,9 @@ private:
     void createSyncObjects();
 
     //BUFFERS
-    void createVertexBuffer();
+    //void createVertexBuffer();
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    void createIndexBuffer();
+    //void createIndexBuffer();
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
@@ -245,9 +237,6 @@ private:
     void createTextureSampler();
     void createDepthResources();//for all depth resources
     void createColorResources();// for all multisampling resources
-
-    //MODELS
-    void loadModel();
 
     //helper functions
     VkCommandBuffer beginSingleCommands();

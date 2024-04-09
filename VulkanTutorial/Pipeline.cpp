@@ -143,13 +143,18 @@ void Pipeline::Init(VkDevice logicalDevice, VkExtent2D swapChainExtent, VkDescri
     colorBlending.blendConstants[2] = 0.0f; // Optional
     colorBlending.blendConstants[3] = 0.0f; // Optional
 
+
+    VkPushConstantRange pushConstants{};
+    pushConstants.offset = 0;
+    pushConstants.size = sizeof(glm::mat4);
+    pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
     VkPipelineLayoutCreateInfo pipelineLayout{};
     pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayout.setLayoutCount = 1;
     pipelineLayout.pSetLayouts = &descriptorSetLayout;
-    pipelineLayout.pushConstantRangeCount = 0;//optional
-    pipelineLayout.pPushConstantRanges = nullptr;//optional
+    pipelineLayout.pushConstantRangeCount = 1;
+    pipelineLayout.pPushConstantRanges = &pushConstants;
 
     if (vkCreatePipelineLayout(logicalDevice, &pipelineLayout, nullptr, &m_PipelineLayout) != VK_SUCCESS)
     {
