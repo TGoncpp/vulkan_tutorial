@@ -100,13 +100,13 @@ void Game::initVulkan()
     createImageViews();
     createRenderPass();
     createDescriptorSetLayout();
-    m_p3DObject = std::make_unique< SceneObject>("models/bunny.obj", "", false);
+    m_p3DObject = std::make_unique< SceneObject>("models/vehicle.obj", "", true);
     m_p3DObject2 = std::make_unique< SceneObject>("models/room.obj", "textures/viking_room.png", true);
     m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv", true);
     m_p3DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
     m_p2DObject = std::make_unique< SceneObject>(m_vsQuare2D, m_vSquraInd);
-    FillOvalResources({}, 0.5f, 12, m_vOval2D, m_vOvalInd);
+    FillOvalResources({}, 0.25f, 16, m_vOval2D, m_vOvalInd);
     m_p2DOvalObject = std::make_unique< SceneObject>(m_vOval2D, m_vOvalInd);
     m_p2DPipeline = std::make_unique<Pipeline>("shader/vert2D.spv", "shader/frag.spv", false);
     m_p2DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
@@ -860,15 +860,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     //3D PIPELINE
 
     //Binding off vertexbuffer
-    pipeline->Record(commandBuffer);
-
-    //bind descriptors to the current frame
-    vkCmdBindDescriptorSets(commandBuffer,
-                             VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             pipeline->GetPipelineLayout(),
-                             0, 1, &m_vDescriptorSets[m_CurrentFrame],
-                             0, nullptr);
-
+    pipeline->Record(commandBuffer, m_vDescriptorSets[m_CurrentFrame]);
    
     //Room
     glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.f, 0.f, 0.f));
@@ -877,15 +869,10 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
     object->Record(commandBuffer);
 
-    //Rabit 1
-    transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
-    transform = glm::scale(transform, glm::vec3(0.2f));
+    //vehicle 
+    transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.f, -1.f, 0.f));
+    transform = glm::scale(transform, glm::vec3(0.025f));
     transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
-    vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    m_p3DObject->Record(commandBuffer);
-
-    //rabit2
-    transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
     vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
     m_p3DObject->Record(commandBuffer);
 
@@ -893,14 +880,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     //----------------------------------------
    //2D PIPELINE
 
-   
-    m_p2DPipeline->Record(commandBuffer);
-
-    vkCmdBindDescriptorSets(commandBuffer,
-                             VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             m_p2DPipeline->GetPipelineLayout(),
-                             0, 1, &m_vDescriptorSets[m_CurrentFrame],
-                             0, nullptr);
+    m_p2DPipeline->Record(commandBuffer, m_vDescriptorSets[m_CurrentFrame]);
 
     transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.f, 0.f));
     vkCmdPushConstants(commandBuffer, m_p2DPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
@@ -909,6 +889,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.f, 0.f));
     vkCmdPushConstants(commandBuffer, m_p2DPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
     m_p2DOvalObject->Record(commandBuffer);
+
 
 
     vkCmdEndRenderPass(commandBuffer);
@@ -1220,6 +1201,7 @@ void Game::updateUniformBuffer(uint32_t currentImage)
     ubo.model = glm::rotate(glm::mat4(1.0f), /*Time::GetElapesedSec() **/ glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
     ubo.proj  = glm::perspective(m_pCamera->GetfieldOfView(), m_pCamera->GetAspectRatio(), m_pCamera->GetNearPlane(), m_pCamera->GetFarPlane());
+    //ubo.proj  = m_pCamera->GetProjectionMat();
 
     ubo.proj[1][1] *= -1; // flip the y-axis. now it wil be from bottom(0) to top(1)
 

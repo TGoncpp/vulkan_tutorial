@@ -206,9 +206,15 @@ void Pipeline::Init(VkDevice logicalDevice, VkExtent2D swapChainExtent, VkDescri
 
 }
 
-void Pipeline::Record(VkCommandBuffer commandBuffer)
+void Pipeline::Record(VkCommandBuffer commandBuffer, VkDescriptorSet discriptorSet)
 {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_GraphicsPipeline);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        m_PipelineLayout,
+        0, 1, &discriptorSet,
+        0, nullptr);
 }
 
 void Pipeline::Destroy(VkDevice logicalDevice)

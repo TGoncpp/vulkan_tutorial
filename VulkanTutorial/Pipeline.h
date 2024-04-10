@@ -11,7 +11,7 @@ public:
 	Pipeline(const std::string& vertShaderPath, const std::string& fragShaderPath, bool is3D);
 	~Pipeline() = default;
 	void Init(VkDevice logicalDevice, VkExtent2D swapChainExtent, VkDescriptorSetLayout descriptorSetLayout, VkRenderPass renderPass, VkSampleCountFlagBits msaaSamples);
-	void Record(VkCommandBuffer commandBuffer);
+	void Record(VkCommandBuffer commandBuffer, VkDescriptorSet discriptorSet);
 	void Destroy(VkDevice logicalDevice);
 
 	VkPipelineLayout GetPipelineLayout()const { return m_PipelineLayout; };
