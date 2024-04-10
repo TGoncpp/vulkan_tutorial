@@ -98,7 +98,7 @@
     <None Include="particle.vert">
       <Filter>shader</Filter>
     </None>
-    <None Include="shader2D.vert">
+    <None Include="shader\shader2D.vert">
       <Filter>shader</Filter>
     </None>
   </ItemGroup>

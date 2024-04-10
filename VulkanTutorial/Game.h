@@ -119,19 +119,23 @@ private:
     std::unique_ptr<SceneObject> m_p3DObject;
     std::unique_ptr<SceneObject> m_p3DObject2;
 
-    std::vector<Vertex2D> m_vVertex2D
+    std::vector<Vertex2D> m_vsQuare2D
     {
        {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{1.0, 0}},
        {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f},{1.0, 0} },
        {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, { 1.0, 0 }},
        {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f},{ 1.0, 0 }}
     };
-    std::vector<uint32_t> m_vIndices
+    std::vector<uint32_t> m_vSquraInd
     {
         0, 1, 2, 0, 2, 3
     };
+    std::vector<Vertex2D> m_vOval2D;
+    std::vector<uint32_t> m_vOvalInd;
+    void FillOvalResources(const glm::vec2& pos, float radius, int numOfCorners, std::vector<Vertex2D>& vertices, std::vector<uint32_t>& indices);
     std::unique_ptr<Pipeline> m_p2DPipeline;
     std::unique_ptr<SceneObject> m_p2DObject;
+    std::unique_ptr<SceneObject> m_p2DOvalObject;
 
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with

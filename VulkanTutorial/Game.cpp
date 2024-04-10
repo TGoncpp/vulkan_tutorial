@@ -26,6 +26,34 @@ void Game::run()
 //Main functions
 //------------------------------------------------------
 
+void Game::FillOvalResources(const glm::vec2& pos, float radius, int numOfTriangles, std::vector<Vertex2D>& vertices, std::vector<uint32_t>& indices)
+{
+    vertices.clear();
+    indices.clear();
+    constexpr float pi = 3.14159265359f;
+
+    if (numOfTriangles < 3)
+         numOfTriangles = 3;
+     float anglSteps = pi * 2 / numOfTriangles;
+     float currentAngle = 0.0f;
+
+     glm::vec3 normal{ 0.f, 0.f, 1.f };
+
+    Vertex2D startPoint{ { pos}, normal, {} };
+    vertices.push_back(startPoint);
+    Vertex2D Point2{ {startPoint.pos.x + radius * glm::cos(currentAngle), startPoint.pos.y + radius * glm::sin(currentAngle) }, normal, {} };
+    vertices.push_back(Point2);
+    for (int i = 0; i < numOfTriangles; i++)
+    {
+         currentAngle += anglSteps;
+         Vertex2D Point3{ {startPoint.pos.x + radius * glm::cos(currentAngle ), startPoint.pos.y + radius * glm::sin(currentAngle) }, normal, {} };
+         vertices.push_back({ Point3 });
+         indices.push_back(0);
+         indices.push_back(i + 1);
+         indices.push_back(i + 2);
+    }
+}
+
 void Game::initWindow()
 {
     glfwInit();
@@ -77,7 +105,9 @@ void Game::initVulkan()
     m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv", true);
     m_p3DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
-    m_p2DObject = std::make_unique< SceneObject>(m_vVertex2D, m_vIndices);
+    m_p2DObject = std::make_unique< SceneObject>(m_vsQuare2D, m_vSquraInd);
+    FillOvalResources({}, 0.5f, 12, m_vOval2D, m_vOvalInd);
+    m_p2DOvalObject = std::make_unique< SceneObject>(m_vOval2D, m_vOvalInd);
     m_p2DPipeline = std::make_unique<Pipeline>("shader/vert2D.spv", "shader/frag.spv", false);
     m_p2DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
@@ -95,6 +125,7 @@ void Game::initVulkan()
     m_p3DObject2->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
 
     m_p2DObject->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
+    m_p2DOvalObject->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
     
     createUniformBuffers();
     createDescriptorPool();
@@ -133,6 +164,7 @@ void Game::cleanup()
     m_p3DObject->Destroy(m_LogicalDevice);
     m_p3DObject2->Destroy(m_LogicalDevice);
     m_p2DObject->Destroy(m_LogicalDevice);
+    m_p2DOvalObject->Destroy(m_LogicalDevice);
     m_p3DPipeline->Destroy(m_LogicalDevice);
     m_p2DPipeline->Destroy(m_LogicalDevice);
 
@@ -869,9 +901,14 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
                              m_p2DPipeline->GetPipelineLayout(),
                              0, 1, &m_vDescriptorSets[m_CurrentFrame],
                              0, nullptr);
+
     transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.f, 0.f));
     vkCmdPushConstants(commandBuffer, m_p2DPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
     m_p2DObject->Record(commandBuffer);
+    
+    transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.f, 0.f));
+    vkCmdPushConstants(commandBuffer, m_p2DPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p2DOvalObject->Record(commandBuffer);
 
 
     vkCmdEndRenderPass(commandBuffer);
