@@ -824,6 +824,9 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     scissor.offset = { 0,0 };
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
+    //----------------------------------------
+    //3D PIPELINE
+
     //Binding off vertexbuffer
     pipeline->Record(commandBuffer);
 
@@ -842,19 +845,21 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
     object->Record(commandBuffer);
 
-    ////Rabit 1
-    //transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
-    //transform = glm::scale(transform, glm::vec3(0.2f));
-    //transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
-    //vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    //m_p3DObject->Record(commandBuffer);
+    //Rabit 1
+    transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
+    transform = glm::scale(transform, glm::vec3(0.2f));
+    transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
+    vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p3DObject->Record(commandBuffer);
 
-    ////rabit2
-    //transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
-    //vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    //m_p3DObject->Record(commandBuffer);
+    //rabit2
+    transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
+    vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p3DObject->Record(commandBuffer);
 
 
+    //----------------------------------------
+   //2D PIPELINE
 
    
     m_p2DPipeline->Record(commandBuffer);
