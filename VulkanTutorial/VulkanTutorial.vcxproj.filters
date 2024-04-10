@@ -67,6 +67,9 @@
     <ClInclude Include="Time.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CommandBuffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\dae.jpg">
@@ -93,6 +96,9 @@
       <Filter>shader</Filter>
     </None>
     <None Include="particle.vert">
+      <Filter>shader</Filter>
+    </None>
+    <None Include="shader2D.vert">
       <Filter>shader</Filter>
     </None>
   </ItemGroup>

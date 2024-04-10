@@ -10,7 +10,9 @@ class SceneObject
 {
 public:
     SceneObject(const std::string& modelPath, const std::string& texturePath, bool isColored)
-        : m_ModelPath{ modelPath }, m_TexturePath{ texturePath }, m_IsCollored{ isColored } {};
+        : m_ModelPath{ modelPath }, m_TexturePath{ texturePath }, m_IsCollored{ isColored }, m_Is3D{ true } {};
+    SceneObject(const std::vector<Vertex2D>& vVertex, const std::vector<uint32_t>& vIndices)
+        : m_vVertices2D{ vVertex }, m_vIndices{ vIndices }, m_Is3D{ false } {};
 
 	~SceneObject() = default;
     void Init(VkPhysicalDevice& m_PhysicalDevicem ,VkDevice& logicDevice, VkCommandPool& commandPool, const int FrmasInFlight, VkQueue& graphicsQueue);
@@ -22,16 +24,18 @@ public:
     std::vector<uint32_t> GetIndices()const { return m_vIndices; };
 
 private:
+    bool m_Is3D{ true };
     bool m_IsCollored{ true };
     //VkCommandPool m_CommandPool;
     //std::vector<VkCommandBuffer> m_vCommandBuffers;
-    std::vector<Vertex> m_vVertices;
+    std::vector<Vertex3D> m_vVertices3D;
+    std::vector<Vertex2D> m_vVertices2D;
     std::vector<uint32_t> m_vIndices;//use uint32_t when amount get above 65535
     VkBuffer m_VertexBuffer;
     VkDeviceMemory m_VertexBufferMemory;
     VkBuffer m_IndexBuffer;
     VkDeviceMemory m_IndexBufferMemory;
-    std::string m_ModelPath;
+    std::string m_ModelPath{ "" };
     std::string m_TexturePath;
 
 

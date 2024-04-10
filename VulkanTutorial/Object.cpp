@@ -40,6 +40,8 @@ void SceneObject::Destroy(VkDevice& logicDevice)
 
 void SceneObject::loadModel()
 {
+    if (m_ModelPath == "")return;
+
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
     std::vector<tinyobj::material_t> materials;
@@ -50,12 +52,12 @@ void SceneObject::loadModel()
         throw std::runtime_error{ "failed to load in obj" + warningMessage + errorMessege };
     }
 
-    std::unordered_map<Vertex, uint32_t> mUniqueVertexes{};
+    std::unordered_map<Vertex3D, uint32_t> mUniqueVertexes{};
     for (const auto& shape : shapes)
     {
         for (const auto& index : shape.mesh.indices)
         {
-            Vertex vertex{};
+            Vertex3D vertex{};
 
             vertex.pos = {
                 attrib.vertices[3 * index.vertex_index + 0],
@@ -73,8 +75,8 @@ void SceneObject::loadModel()
 
             if (mUniqueVertexes.count(vertex) == 0)
             {
-                mUniqueVertexes[vertex] = static_cast<uint32_t>(m_vVertices.size());
-                m_vVertices.push_back(vertex);
+                mUniqueVertexes[vertex] = static_cast<uint32_t>(m_vVertices3D.size());
+                m_vVertices3D.push_back(vertex);
             }
 
             m_vIndices.push_back(mUniqueVertexes[vertex]);
@@ -101,7 +103,7 @@ void SceneObject::loadModel()
 
 void SceneObject::createVertexBuffer(VkPhysicalDevice& physicalDevice, VkDevice& logicDevice, VkCommandPool& commandPool, VkQueue& graphicsQueue)
 {
-    VkDeviceSize bufferSize = sizeof(m_vVertices[0]) * m_vVertices.size();
+    VkDeviceSize bufferSize = m_Is3D ? sizeof(m_vVertices3D[0]) * m_vVertices3D.size() : sizeof(m_vVertices2D[0]) * m_vVertices2D.size();
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
 
@@ -111,8 +113,9 @@ void SceneObject::createVertexBuffer(VkPhysicalDevice& physicalDevice, VkDevice&
         stagingBuffer, stagingBufferMemory);
 
     void* data;
+    void* srcData{ m_Is3D ? (void*)m_vVertices3D.data() : (void*)m_vVertices2D.data() };
     vkMapMemory(logicDevice, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, m_vVertices.data(), static_cast<size_t>(bufferSize));
+    memcpy(data, srcData, static_cast<size_t>(bufferSize));
     vkUnmapMemory(logicDevice, stagingBufferMemory);
 
     //Binding the vertex buffer will happen in the recordCommandBuffer()

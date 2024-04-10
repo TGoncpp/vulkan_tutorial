@@ -91,6 +91,7 @@ private:
     std::vector < VkFence> m_vInFlightFences;
 
     std::vector<VkCommandBuffer> m_vCommandBuffers;
+    std::vector<VkCommandBuffer> m_vCommandBuffers2D;
     std::vector<VkBuffer> m_vUniformBuffers;
     std::vector<VkDeviceMemory> m_vUniformBuffersMemory;
     std::vector<void*> m_vUniformBuffersMapped;
@@ -117,6 +118,20 @@ private:
     std::unique_ptr<Pipeline> m_p3DPipeline;
     std::unique_ptr<SceneObject> m_p3DObject;
     std::unique_ptr<SceneObject> m_p3DObject2;
+
+    std::vector<Vertex2D> m_vVertex2D
+    {
+       {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f},{1.0, 0}},
+       {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f},{1.0, 0} },
+       {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, { 1.0, 0 }},
+       {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f},{ 1.0, 0 }}
+    };
+    std::vector<uint32_t> m_vIndices
+    {
+        0, 1, 2, 0, 2, 3
+    };
+    std::unique_ptr<Pipeline> m_p2DPipeline;
+    std::unique_ptr<SceneObject> m_p2DObject;
 
 
     //gloabal variables for keeping track off rendering frames and the max off frames to deal with
@@ -191,13 +206,14 @@ private:
 
    // //RENDER PASS
     void createRenderPass();
+    void beginRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex);
 
     //DRAWING
     //----------------------------------
     void createFramebuffer();
     void createCommandPool();
-    void createCommandBuffers();
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline pipeline);
+    void createCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers);
+    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline* pipeline, SceneObject* object);
     void drawFrame();
 
     //SEMAPHORE AND FENCE

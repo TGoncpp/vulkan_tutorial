@@ -39,18 +39,18 @@ void Game::initWindow()
 
     glfwSetKeyCallback(m_Window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
         void* pUser = glfwGetWindowUserPointer(window);
-        Camera* vBase = static_cast<Camera*>(pUser);
-        vBase->keyEvent(key, scancode, action, mods);
+        Game* vBase = static_cast<Game*>(pUser);
+        vBase->m_pCamera->keyEvent(key, scancode, action, mods);
         });
     glfwSetCursorPosCallback(m_Window, [](GLFWwindow* window, double xpos, double ypos) {
         void* pUser = glfwGetWindowUserPointer(window);
-        Camera* vBase = static_cast<Camera*>(pUser);
-        vBase->mouseMove(window, xpos, ypos);
+        Game* vBase = static_cast<Game*>(pUser);
+        vBase->m_pCamera->mouseMove(window, xpos, ypos);
         });
     glfwSetMouseButtonCallback(m_Window, [](GLFWwindow* window, int button, int action, int mods) {
         void* pUser = glfwGetWindowUserPointer(window);
-        Camera* vBase = static_cast<Camera*>(pUser);
-        vBase->mouseEvent(window, button, action, mods);
+        Game* vBase = static_cast<Game*>(pUser);
+        vBase->m_pCamera->mouseEvent(window, button, action, mods);
         });
 }
 
@@ -72,8 +72,14 @@ void Game::initVulkan()
     createImageViews();
     createRenderPass();
     createDescriptorSetLayout();
-    m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv");
+    m_p3DObject = std::make_unique< SceneObject>("models/bunny.obj", "", false);
+    m_p3DObject2 = std::make_unique< SceneObject>("models/room.obj", "textures/viking_room.png", true);
+    m_p3DPipeline = std::make_unique<Pipeline>("shader/vert.spv", "shader/frag.spv", true);
     m_p3DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
+
+    m_p2DObject = std::make_unique< SceneObject>(m_vVertex2D, m_vIndices);
+    m_p2DPipeline = std::make_unique<Pipeline>("shader/vert2D.spv", "shader/frag.spv", false);
+    m_p2DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
     m_pCamera = std::make_unique< Camera>(glm::vec3{ 0.0f, 0.0f, 0.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
     createCommandPool();
@@ -83,11 +89,12 @@ void Game::initVulkan()
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
-    createCommandBuffers();
-    m_p3DObject = std::make_unique< SceneObject>("models/bunny.obj", "", false);
-    m_p3DObject2 = std::make_unique< SceneObject>("models/room.obj", "textures/viking_room.png", true);
+    createCommandBuffers(m_vCommandBuffers);
+    createCommandBuffers(m_vCommandBuffers2D);
     m_p3DObject->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
     m_p3DObject2->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
+
+    m_p2DObject->Init(m_PhysicalDevice, m_LogicalDevice, m_CommandPool, MAX_FRAMES_IN_FLIGHT, m_GraphicsQueue);
     
     createUniformBuffers();
     createDescriptorPool();
@@ -125,7 +132,9 @@ void Game::cleanup()
     
     m_p3DObject->Destroy(m_LogicalDevice);
     m_p3DObject2->Destroy(m_LogicalDevice);
+    m_p2DObject->Destroy(m_LogicalDevice);
     m_p3DPipeline->Destroy(m_LogicalDevice);
+    m_p2DPipeline->Destroy(m_LogicalDevice);
 
     for (size_t i{}; i < MAX_FRAMES_IN_FLIGHT; ++i)
     {
@@ -710,6 +719,27 @@ void Game::createRenderPass()
     }
 }
 
+void Game::beginRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex)
+{
+    VkRenderPassBeginInfo renderPassInfo{};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = m_RenderPass;
+    renderPassInfo.framebuffer = m_vSwapchainFramebuffers[imageIndex];
+    //renderArea defines where the shader load and store happens
+    renderPassInfo.renderArea.offset = { 0,0 };
+    renderPassInfo.renderArea.extent = m_SwapChainExtent;
+
+    std::array<VkClearValue, 2> clearValues{};
+    clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+    //clearValues[1].depthStencil      = {m_FarPlane, 0};//should be farplane
+    clearValues[1].depthStencil = { 1.0f, 0 };
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
+
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+
 void Game::createFramebuffer()
 {
     m_vSwapchainFramebuffers.resize(m_vSwapChainImageViews.size());
@@ -749,24 +779,24 @@ void Game::createCommandPool()
     }
 }
 
-void Game::createCommandBuffers()
+void Game::createCommandBuffers(std::vector<VkCommandBuffer>& commandBuffers)
 {
-    m_vCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     VkCommandBufferAllocateInfo allocInfo{};
     allocInfo.sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool        = m_CommandPool;
     allocInfo.level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = static_cast<uint32_t>(m_vCommandBuffers.size());
+    allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-    if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, m_vCommandBuffers.data()) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(m_LogicalDevice, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
     {
         throw std::runtime_error("Allocation off command buffer failed");
     }
 
 }
 
-void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline pipeline)
+void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex, Pipeline* pipeline, SceneObject* object)
 {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -778,22 +808,7 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
         throw std::runtime_error("failed to bgin recording command buffer");
     }
 
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType             = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass        = m_RenderPass;
-    renderPassInfo.framebuffer       = m_vSwapchainFramebuffers[imageIndex];
-    //renderArea defines where the shader load and store happens
-    renderPassInfo.renderArea.offset = { 0,0 };
-    renderPassInfo.renderArea.extent = m_SwapChainExtent;
-
-    std::array<VkClearValue, 2> clearValues{};
-    clearValues[0].color             = {{0.0f, 0.0f, 0.0f, 1.0f}};
-    //clearValues[1].depthStencil      = {m_FarPlane, 0};//should be farplane
-    clearValues[1].depthStencil      = {1.0f, 0};
-    renderPassInfo.clearValueCount   = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues      = clearValues.data();
-
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    beginRenderPass(commandBuffer, imageIndex);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -810,34 +825,48 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
     //Binding off vertexbuffer
-    pipeline.Record(commandBuffer);
+    pipeline->Record(commandBuffer);
 
     //bind descriptors to the current frame
     vkCmdBindDescriptorSets(commandBuffer,
                              VK_PIPELINE_BIND_POINT_GRAPHICS,
-                             pipeline.GetPipelineLayout(),
+                             pipeline->GetPipelineLayout(),
                              0, 1, &m_vDescriptorSets[m_CurrentFrame],
                              0, nullptr);
 
    
     //Room
     glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.f, 0.f, 0.f));
-    transform = glm::rotate(transform, Time::GetElapesedSec() * glm::radians(-m_RotationSpeed), glm::vec3(0.f, 0, 1.0f));
-    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    m_p3DObject2->Record(commandBuffer);
+    //transform = glm::translate(transform, m_pCamera->GetPosition());
+    transform = glm::rotate(transform, /*Time::GetElapesedSec() **/ glm::radians(-m_RotationSpeed), glm::vec3(0.f, 0, 1.0f));
+    vkCmdPushConstants(commandBuffer, pipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    object->Record(commandBuffer);
 
-    //Rabit 1
-    transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
-    transform = glm::scale(transform, glm::vec3(0.2f));
-    transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
-    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    m_p3DObject->Record(commandBuffer);
+    ////Rabit 1
+    //transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.f, 0.f, 0.f));
+    //transform = glm::scale(transform, glm::vec3(0.2f));
+    //transform = glm::rotate(transform, glm::radians(90.f), glm::vec3(1.f, 0, 0));
+    //vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    //m_p3DObject->Record(commandBuffer);
 
-    //rabit2
-    transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
-    vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
-    m_p3DObject->Record(commandBuffer);
+    ////rabit2
+    //transform = glm::translate(transform, glm::vec3(2.f, 0.f, 5.f));
+    //vkCmdPushConstants(commandBuffer, pipeline.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    //m_p3DObject->Record(commandBuffer);
 
+
+
+   
+    m_p2DPipeline->Record(commandBuffer);
+
+    vkCmdBindDescriptorSets(commandBuffer,
+                             VK_PIPELINE_BIND_POINT_GRAPHICS,
+                             m_p2DPipeline->GetPipelineLayout(),
+                             0, 1, &m_vDescriptorSets[m_CurrentFrame],
+                             0, nullptr);
+    transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.f, 0.f));
+    vkCmdPushConstants(commandBuffer, m_p2DPipeline->GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &transform);
+    m_p2DObject->Record(commandBuffer);
 
 
     vkCmdEndRenderPass(commandBuffer);
@@ -846,6 +875,8 @@ void Game::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageInde
     {
         throw std::runtime_error("failed to record command buffer");
     }
+
+   
 }
 
 void Game::drawFrame()
@@ -869,7 +900,8 @@ void Game::drawFrame()
 
     //3.Recording the command buffer
     vkResetCommandBuffer(m_vCommandBuffers[m_CurrentFrame], 0);
-    recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex, *m_p3DPipeline);
+    recordCommandBuffer(m_vCommandBuffers[m_CurrentFrame], imageIndex, m_p3DPipeline.get(), m_p3DObject2.get());
+    
    
 
     //3.5 Upadate transformation on image
@@ -885,8 +917,10 @@ void Game::drawFrame()
    submitInfo.pWaitSemaphores        = waitSemaphores;
    submitInfo.pWaitDstStageMask      = waitstages;
    
+   //VkCommandBuffer arrCommandBuffers[] = { m_vCommandBuffers[m_CurrentFrame], m_vCommandBuffers2D[m_CurrentFrame] };
    submitInfo.commandBufferCount   = 1;
    submitInfo.pCommandBuffers      = &m_vCommandBuffers[m_CurrentFrame];
+   //submitInfo.pCommandBuffers      = arrCommandBuffers;
    
    VkSemaphore signalSemaphore[]   = { m_vRenderFinishedAvailableSemaphores[m_CurrentFrame] };
    submitInfo.signalSemaphoreCount = 1;
@@ -1141,8 +1175,7 @@ void Game::createDescriptorSetLayout()
 void Game::updateUniformBuffer(uint32_t currentImage)
 {
     UniformBufferObject ubo{};
-    //ubo.model = glm::rotate(glm::mat4(1.0f), /*Time::GetElapesedSec() **/ glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.model = glm::translate(glm::mat4(1.0f), m_pCamera->GetPosition());
+    ubo.model = glm::rotate(glm::mat4(1.0f), /*Time::GetElapesedSec() **/ glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
     ubo.view  = glm::lookAt(glm::vec3{ 2.0f, 2.0f, 2.0f }, m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
     ubo.proj  = glm::perspective(m_pCamera->GetfieldOfView(), m_pCamera->GetAspectRatio(), m_pCamera->GetNearPlane(), m_pCamera->GetFarPlane());
 

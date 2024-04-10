@@ -6,8 +6,8 @@
 #include "structs.h"
 
 
-Pipeline::Pipeline(const std::string& vertShaderPath, const std::string& fragShaderPath)
-    :m_FragShader{fragShaderPath}, m_VerShader{vertShaderPath}
+Pipeline::Pipeline(const std::string& vertShaderPath, const std::string& fragShaderPath, bool is3D)
+    :m_VerShader{vertShaderPath}, m_FragShader{fragShaderPath}, m_Is3D{is3D}
 {
 }
 
@@ -48,8 +48,18 @@ void Pipeline::Init(VkDevice logicalDevice, VkExtent2D swapChainExtent, VkDescri
     dynamicInfo.pDynamicStates = vDynamicStates.data();
 
     //vertex format info 
-    auto bindingDescription = Vertex::getBindDescription();
-    auto attributeDescription = Vertex::getAttributeDescriptions();
+    VkVertexInputBindingDescription bindingDescription;
+    std::array<VkVertexInputAttributeDescription, 3>attributeDescription;
+    if (m_Is3D)
+    {
+       bindingDescription = Vertex3D::getBindDescription();
+       attributeDescription = Vertex3D::getAttributeDescriptions();
+    }
+    else
+    {
+        bindingDescription   = Vertex2D::getBindDescription();
+        attributeDescription = Vertex2D::getAttributeDescriptions();
+    }
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -148,6 +158,7 @@ void Pipeline::Init(VkDevice logicalDevice, VkExtent2D swapChainExtent, VkDescri
     pushConstants.offset = 0;
     pushConstants.size = sizeof(glm::mat4);
     pushConstants.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
     //Pipeline Layout ->used for dynamic behaviour like passing the tranform matrix to vertexshader or texture sampler to fragment shader
     VkPipelineLayoutCreateInfo pipelineLayout{};
     pipelineLayout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
