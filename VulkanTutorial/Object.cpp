@@ -64,15 +64,26 @@ void SceneObject::loadModel()
                 attrib.vertices[3 * index.vertex_index + 1],
                 attrib.vertices[3 * index.vertex_index + 2]
             };
-            if(m_IsCollored)
+            if (m_IsCollored)
             {
                 vertex.texcoord = {
                     attrib.texcoords[2 * index.texcoord_index + 0],
                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1] //1.0- is because we flip the y-axis in our settings
                 };
             }
-            vertex.color = { 1.0f, 1.0f, 1.0f };
 
+            if (m_IsCollored && attrib.normals.size()> 3 * index.vertex_index + 2)
+            {
+                vertex.normal = {
+                    attrib.normals[3 * index.vertex_index + 0],
+                    attrib.normals[3 * index.vertex_index + 1],
+                    attrib.normals[3 * index.vertex_index + 2]
+                };
+            }
+            else
+            {
+                vertex.normal = { 0.0f, 0.0f, 1.f };
+            }
             if (mUniqueVertexes.count(vertex) == 0)
             {
                 mUniqueVertexes[vertex] = static_cast<uint32_t>(m_vVertices3D.size());

@@ -34,7 +34,7 @@ struct SwapChainSupportDetails
 struct Vertex3D 
 {
 	glm::vec3 pos;
-	glm::vec3 color;
+	glm::vec3 normal;
 	glm::vec2 texcoord;
 
 	static VkVertexInputBindingDescription getBindDescription()
@@ -58,7 +58,7 @@ struct Vertex3D
 		attributeDescriptions[1].binding  = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset   = offsetof(Vertex3D, color); 
+		attributeDescriptions[1].offset   = offsetof(Vertex3D, normal); 
 
 		attributeDescriptions[2].binding  = 0;
 		attributeDescriptions[2].location = 2;
@@ -70,7 +70,7 @@ struct Vertex3D
 
 	bool operator ==(const Vertex3D& other)const
 	{
-		return pos == other.pos && color == other.color && texcoord == other.texcoord;
+		return pos == other.pos && normal == other.normal && texcoord == other.texcoord;
 	}
 
 };
@@ -78,12 +78,12 @@ struct Vertex3D
 struct Vertex2D
 {
 	glm::vec2 pos;
-	glm::vec3 color;
+	glm::vec3 normal;
 	glm::vec2 texcoord;
 
 	Vertex2D() = default;
-	Vertex2D(glm::vec2 ps, glm::vec3 clr, glm::vec2 txcrd)
-		: pos{ ps }, color{ clr }, texcoord{ txcrd } {};
+	Vertex2D(glm::vec2 ps, glm::vec3 nrm, glm::vec2 txcrd)
+		: pos{ ps }, normal{ nrm }, texcoord{ txcrd } {};
 
 
 	static VkVertexInputBindingDescription getBindDescription()
@@ -107,7 +107,7 @@ struct Vertex2D
 		attributeDescriptions[1].binding  = 0;
 		attributeDescriptions[1].location = 1;
 		attributeDescriptions[1].format   = VK_FORMAT_R32G32B32_SFLOAT;
-		attributeDescriptions[1].offset   = offsetof(Vertex2D, color);
+		attributeDescriptions[1].offset   = offsetof(Vertex2D, normal);
 
 		attributeDescriptions[2].binding  = 0;
 		attributeDescriptions[2].location = 2;
@@ -119,7 +119,7 @@ struct Vertex2D
 
 	bool operator ==(const Vertex2D& other)const
 	{
-		return pos == other.pos && color == other.color && texcoord == other.texcoord;
+		return pos == other.pos && normal == other.normal && texcoord == other.texcoord;
 	}
 
 };
@@ -129,7 +129,7 @@ namespace std {
 	template<> struct hash<Vertex3D> {
 		size_t operator()(Vertex3D const& vertex) const {
 			return ((hash<glm::vec3>()(vertex.pos) ^
-				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec3>()(vertex.normal) << 1)) >> 1) ^
 				(hash<glm::vec2>()(vertex.texcoord) << 1);
 		}
 	};
