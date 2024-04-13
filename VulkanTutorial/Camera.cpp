@@ -6,6 +6,19 @@
 #define GLM_FORCE_RADIANS
 
 
+void Camera::Init(const glm::vec3& cameraPos, float fov, float ar)
+{
+	m_CameraPos=  cameraPos ;
+	m_FieldOfView= fov ;
+	m_AspecRatio= ar ;
+	m_Up = glm::vec3{0.f, 0.f, 1.f };
+	m_NearPlane = 0.1f;
+	m_FarPlane = 10.f;
+	m_Forward = glm::vec3{ 1.f, 0.f, 0.f };
+	float m_Pitch =  glm::radians(45.f) ;
+
+}
+
 void Camera::MoveCamera(const glm::vec3& offset)
 {
 }
@@ -63,7 +76,7 @@ void Camera::mouseEvent(GLFWwindow* window, int button, int action, int mods)
 
 void Camera::CalculateViewMatrix()
 {
-	glm::mat4 rotation = glm::rotate(glm::mat4(1.f), m_Yaw, glm::vec3{ 0.f, 0.f, 1.f });
+	glm::mat4 rotation = glm::rotate(glm::mat4(1.f), m_Yaw, glm::vec3{ 0.f, 1.f, 0.f });
 	rotation = glm::rotate(rotation, m_Pitch, glm::vec3{ 1.f,0.f,0.f });
 
 	m_Forward = glm::normalize(rotation[2]);

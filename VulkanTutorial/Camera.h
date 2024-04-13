@@ -16,6 +16,8 @@ public:
         calculateProjectionMat();
     }
     ~Camera() = default;
+
+    void Init(const glm::vec3& cameraPos, float fov, float ar);
     glm::mat4 GetProjectionMat()const { return m_ProjectionMat; };
     glm::vec3 GetPosition()const { return m_CameraPos; };
     glm::vec3 GetForwardView()const { return m_Forward; };
@@ -39,7 +41,7 @@ private:
     glm::mat4 m_ViewMat{ glm::mat4(1) };
     glm::vec3 m_CameraPos{ 2.0f, 2.0f, 2.0f };
     const glm::vec3 m_WorldCenter{ 0.0f, 0.0f, 0.0f };
-    float m_FieldOfView{ glm::radians(45.f) };
+    float m_FieldOfView{ glm::radians(-45.f) };
     float m_AspecRatio{ 1.f };
     float m_NearPlane{ 0.1f };
     float m_FarPlane{ 10.0f };

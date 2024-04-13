@@ -112,6 +112,7 @@ void Game::initVulkan()
     m_p2DPipeline->Init(m_LogicalDevice, m_SwapChainExtent, m_DescriptorSetLayout, m_RenderPass, m_MsaaSamples);
 
     m_pCamera = std::make_unique< Camera>(glm::vec3{ 2.0f, 2.0f, 2.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
+    //m_pCamera->Init(glm::vec3{ 2.0f, 2.0f, 2.0f }, glm::radians(45.f), m_SwapChainExtent.width / (float)m_SwapChainExtent.height);
     createCommandPool();
     createColorResources();
     createDepthResources();
@@ -1200,9 +1201,9 @@ void Game::updateUniformBuffer(uint32_t currentImage)
     UniformBufferObject ubo{};
     ubo.model = glm::rotate(glm::mat4(1.0f), /*Time::GetElapesedSec() **/ glm::radians(m_RotationSpeed), glm::vec3(0.0f, 0.0f, 1.0f));
     //ubo.view = m_pCamera->CalculateViewMatrix();
-    //ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
-    m_pCamera->CalculateViewMatrix();
-    ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetPosition() + m_pCamera->GetForwardView(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetWorldCenterPosition(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
+    //m_pCamera->CalculateViewMatrix();
+    //ubo.view  = glm::lookAt(m_pCamera->GetPosition(), m_pCamera->GetPosition() + m_pCamera->GetForwardView(), glm::vec3(0.0f, 0.0f, 1.0f));// up vector
     ubo.proj  = glm::perspective(m_pCamera->GetfieldOfView(), m_pCamera->GetAspectRatio(), m_pCamera->GetNearPlane(), m_pCamera->GetFarPlane());
     //ubo.proj  = m_pCamera->GetProjectionMat();
 

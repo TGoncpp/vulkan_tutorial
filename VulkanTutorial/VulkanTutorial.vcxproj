@@ -153,8 +153,10 @@
     <ClInclude Include="Object.h" />
     <ClInclude Include="Pipeline.h" />
     <ClInclude Include="Semaphore.h" />
+    <ClInclude Include="stb-master\stb-master\stb_image.h" />
     <ClInclude Include="Structs.h" />
     <ClInclude Include="Time.h" />
+    <ClInclude Include="tinyobjloader-release\tiny_obj_loader.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\dae.jpg" />
